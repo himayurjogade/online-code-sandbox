@@ -1,0 +1,9 @@
+groups:
+  - name: execution_slos
+    rules:
+      - record: slo:execution_success_ratio:rate5m
+        expr: sum(rate(executions_processed_total{status="COMPLETED"}[5m])) / sum(rate(executions_processed_total[5m]))
+      - record: slo:execution_duration_p95:rate5m
+        expr: histogram_quantile(0.95, sum(rate(execution_duration_seconds_bucket[5m])) by (le))
+      - record: slo:api_availability_ratio:rate5m
+        expr: sum(rate(http_requests_total{status_code!~"5.."}[5m])) / sum(rate(http_requests_total[5m]))

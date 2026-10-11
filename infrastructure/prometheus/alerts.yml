@@ -1,0 +1,38 @@
+groups:
+  - name: execution_alerts
+    rules:
+      - alert: ExecutionSuccessRateBelowSLO
+        expr: slo:execution_success_ratio:rate5m < 0.99
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Execution success rate below 99% SLO'
+          description: 'Success rate is {{ $value | humanizePercentage }} over the last 5m (SLO: 99%).'
+
+      - alert: QueueBacklogGrowing
+        expr: queue_depth > 5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Execution queue backlog growing'
+          description: 'queue_depth is {{ $value }} and has stayed above 5 for 2 minutes.'
+
+      - alert: WorkerDown
+        expr: up{job="worker"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Worker is down'
+          description: 'Prometheus cannot scrape the worker target — no jobs are being processed.'
+
+      - alert: ApiDown
+        expr: up{job="api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'API is down'
+          description: 'Prometheus cannot scrape the api target — submissions will fail.'
