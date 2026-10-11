@@ -1,7 +1,9 @@
 import { Redis } from 'ioredis';
-import { QUEUE_NAME } from '@online-code-sandbox/shared';
+import { QUEUE_NAME, createLogger } from '@online-code-sandbox/shared';
 import type { ExecutionJob } from '@online-code-sandbox/shared';
 import { config } from './config.js';
+
+const logger = createLogger('worker');
 
 /**
  * Separate Redis client for blocking queue operations.
@@ -13,7 +15,7 @@ const blockingClient = new Redis(config.redisUrl, {
 });
 
 blockingClient.on('error', (err: Error) => {
-  console.error('[Queue] Redis error:', err.message);
+  logger.error({ err }, 'Queue Redis error');
 });
 
 /**

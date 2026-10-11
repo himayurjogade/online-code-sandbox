@@ -1,5 +1,8 @@
 import { Redis } from 'ioredis';
+import { createLogger } from '@online-code-sandbox/shared';
 import { config } from '../config.js';
+
+const logger = createLogger('api');
 
 /**
  * Singleton Redis client for the API server.
@@ -14,15 +17,15 @@ export const redis = new Redis(config.redisUrl, {
 });
 
 redis.on('error', (err: Error) => {
-  console.error('[Redis] Connection error:', err.message);
+  logger.error({ err }, 'Redis connection error');
 });
 
 redis.on('connect', () => {
-  console.log('[Redis] Connected to', config.redisUrl);
+  logger.info({ redisUrl: config.redisUrl }, 'Connected to Redis');
 });
 
 /** Gracefully close the Redis connection. */
 export async function shutdownRedis(): Promise<void> {
   await redis.quit();
-  console.log('[Redis] Connection closed.');
+  logger.info('Redis connection closed');
 }

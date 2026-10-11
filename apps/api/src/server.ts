@@ -4,8 +4,11 @@ import { config } from './config.js';
 import { executionsRouter } from './routes/executions.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { shutdownRedis } from './services/redisClient.js';
+import { createLogger } from '@online-code-sandbox/shared';
 import client from 'prom-client';
 import os from 'node:os';
+
+const logger = createLogger('api');
 
 // ── Metrics Setup ────────────────────────────────────────────────────────────
 
@@ -69,13 +72,13 @@ app.use(errorHandler);
 // ── Start server ────────────────────────────────────────────────────────────
 
 const server = app.listen(config.port, () => {
-  console.log(`[API] Server listening on http://localhost:${config.port}`);
+  logger.info({ port: config.port }, 'Server listening');
 });
 
 // ── Graceful shutdown ───────────────────────────────────────────────────────
 
 async function shutdown(signal: string) {
-  console.log(`\n[API] ${signal} received — shutting down...`);
+  logger.info({ signal }, 'Shutdown signal received');
   server.close();
   await shutdownRedis();
   process.exit(0);
