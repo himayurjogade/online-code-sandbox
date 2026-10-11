@@ -4,3 +4,4 @@ node_modules/
 pnpm-lock.yaml
 coverage/
 infrastructure/terraform/.terraform
+infrastructure/terraform/*.tfstate*

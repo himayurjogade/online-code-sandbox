@@ -5,6 +5,7 @@ import {
   EXECUTION_TTL_SECONDS,
   validateExecutionRequest,
   isTerminalStatus,
+  startRootSpan,
 } from '@online-code-sandbox/shared';
 import type {
   ExecutionState,
@@ -55,6 +56,11 @@ export async function createExecution(body: unknown): Promise<CreateExecutionRes
   const { language, source } = body as ExecutionRequest;
   const executionId = crypto.randomUUID();
 
+  const { span, traceId, spanId } = startRootSpan('api', 'submit_execution', {
+    executionId,
+    language,
+  });
+
   const state: ExecutionState = {
     executionId,
     status: ExecutionStatus.QUEUED,
@@ -70,8 +76,10 @@ export async function createExecution(body: unknown): Promise<CreateExecutionRes
 
   const key = executionKey(executionId);
   await redis.set(key, JSON.stringify(state), 'EX', EXECUTION_TTL_SECONDS);
-  await enqueueExecution({ executionId, language, source });
+  await enqueueExecution({ executionId, language, source, traceId, spanId });
   executionsSubmittedTotal.inc();
+
+  span.end();
 
   return { executionId };
 }

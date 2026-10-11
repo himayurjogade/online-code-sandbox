@@ -4,10 +4,11 @@ import { config } from './config.js';
 import { executionsRouter } from './routes/executions.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { shutdownRedis } from './services/redisClient.js';
-import { createLogger } from '@online-code-sandbox/shared';
+import { createLogger, initTracing } from '@online-code-sandbox/shared';
 import client from 'prom-client';
 import os from 'node:os';
 
+initTracing('api');
 const logger = createLogger('api');
 
 // ── Metrics Setup ────────────────────────────────────────────────────────────

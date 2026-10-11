@@ -87,6 +87,16 @@ services:
     depends_on:
       - loki
 
+  # ── Tempo (distributed tracing) ──────────────────────────────────────────────
+  tempo:
+    image: grafana/tempo:latest
+    command: -config.file=/etc/tempo/tempo.yml
+    volumes:
+      - ./infrastructure/tempo/tempo.yml:/etc/tempo/tempo.yml
+    ports:
+      - '3200:3200'
+      - '4318:4318'
+
   # ── Web (Vite Dev Server) ────────────────────────────────────────────────────
   web:
     build:

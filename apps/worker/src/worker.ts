@@ -5,6 +5,8 @@ import {
   EXECUTION_TTL_SECONDS,
   isTerminalStatus,
   createLogger,
+  initTracing,
+  startLinkedSpan,
 } from '@online-code-sandbox/shared';
 import type { ExecutionState, ExecutionJob } from '@online-code-sandbox/shared';
 import { config } from './config.js';
@@ -16,6 +18,7 @@ import express from 'express';
 import client from 'prom-client';
 import os from 'node:os';
 
+initTracing('worker');
 const logger = createLogger('worker');
 
 // ── Metrics Setup ────────────────────────────────────────────────────────────
@@ -102,7 +105,7 @@ async function updateState(state: ExecutionState): Promise<void> {
 // ── Job processor ───────────────────────────────────────────────────────────
 
 async function processJob(job: ExecutionJob): Promise<void> {
-  const { executionId, language, source } = job;
+  const { executionId, language, source, traceId, spanId } = job;
   const log = logger.child({ executionId });
   log.info({ language }, 'Processing job');
 
@@ -127,6 +130,10 @@ async function processJob(job: ExecutionJob): Promise<void> {
   await updateState(state);
 
   // Execute
+  const span = startLinkedSpan('worker', 'execute_in_sandbox', traceId, spanId, {
+    executionId,
+    language,
+  });
   try {
     const result = await engine.execute({
       executionId,
@@ -154,6 +161,9 @@ async function processJob(job: ExecutionJob): Promise<void> {
     state.status = ExecutionStatus.RUNTIME_ERROR;
     state.error = err instanceof Error ? err.message : 'Unknown execution error';
     state.exitCode = -1;
+  } finally {
+    span.setAttribute('execution.status', state.status);
+    span.end();
   }
 
   state.completedAt = new Date().toISOString();

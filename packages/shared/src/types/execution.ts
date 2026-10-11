@@ -29,6 +29,9 @@ export interface ExecutionJob {
   executionId: string;
   language: string;
   source: string;
+  /** IDs of the API's root span, so the worker can link its span as a child across the queue boundary. */
+  traceId: string;
+  spanId: string;
 }
 
 /** Response from POST /api/executions. */
