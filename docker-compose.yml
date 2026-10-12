@@ -56,7 +56,15 @@ services:
     ports:
       - '9090:9090'
     volumes:
-      - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./infrastructure/prometheus:/etc/prometheus
+
+  # ── Alertmanager ─────────────────────────────────────────────────────────────
+  alertmanager:
+    image: prom/alertmanager:latest
+    ports:
+      - '9093:9093'
+    volumes:
+      - ./infrastructure/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml
 
   # ── Grafana ──────────────────────────────────────────────────────────────────
   grafana:
@@ -65,8 +73,37 @@ services:
       - '3002:3000'
     volumes:
       - ./infrastructure/grafana/provisioning:/etc/grafana/provisioning
+      - ./infrastructure/grafana/dashboards:/var/lib/grafana/dashboards
     depends_on:
       - prometheus
+
+  # ── Loki (log aggregation) ───────────────────────────────────────────────────
+  loki:
+    image: grafana/loki:latest
+    ports:
+      - '3100:3100'
+    command: -config.file=/etc/loki/local-config.yaml
+
+  # ── Promtail (log shipper) ───────────────────────────────────────────────────
+  promtail:
+    image: grafana/promtail:latest
+    volumes:
+      - ./infrastructure/promtail/promtail.yml:/etc/promtail/promtail.yml
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: -config.file=/etc/promtail/promtail.yml
+    depends_on:
+      - loki
+
+  # ── Tempo (distributed tracing) ──────────────────────────────────────────────
+  tempo:
+    image: grafana/tempo:latest
+    command: -config.file=/etc/tempo/tempo.yml
+    volumes:
+      - ./infrastructure/tempo/tempo.yml:/etc/tempo/tempo.yml
+    ports:
+      - '3200:3200'
+      - '4318:4318'
 
   # ── Web (Vite Dev Server) ────────────────────────────────────────────────────
   web:

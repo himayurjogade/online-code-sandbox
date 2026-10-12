@@ -11,6 +11,7 @@ import type {
   ExecutionRequest,
   CreateExecutionResponse,
 } from '@online-code-sandbox/shared';
+import { startRootSpan, SpanStatusCode } from '@online-code-sandbox/shared/server';
 import { redis } from './redisClient.js';
 import { enqueueExecution } from './queue.js';
 import { executionsSubmittedTotal } from '../server.js';
@@ -55,25 +56,38 @@ export async function createExecution(body: unknown): Promise<CreateExecutionRes
   const { language, source } = body as ExecutionRequest;
   const executionId = crypto.randomUUID();
 
-  const state: ExecutionState = {
+  const { span, traceId, spanId } = startRootSpan('api', 'submit_execution', {
     executionId,
-    status: ExecutionStatus.QUEUED,
     language,
-    source,
-    createdAt: new Date().toISOString(),
-    startedAt: null,
-    completedAt: null,
-    output: null,
-    exitCode: null,
-    error: null,
-  };
+  });
 
-  const key = executionKey(executionId);
-  await redis.set(key, JSON.stringify(state), 'EX', EXECUTION_TTL_SECONDS);
-  await enqueueExecution({ executionId, language, source });
-  executionsSubmittedTotal.inc();
+  try {
+    const state: ExecutionState = {
+      executionId,
+      status: ExecutionStatus.QUEUED,
+      language,
+      source,
+      createdAt: new Date().toISOString(),
+      startedAt: null,
+      completedAt: null,
+      output: null,
+      exitCode: null,
+      error: null,
+    };
 
-  return { executionId };
+    const key = executionKey(executionId);
+    await redis.set(key, JSON.stringify(state), 'EX', EXECUTION_TTL_SECONDS);
+    await enqueueExecution({ executionId, language, source, traceId, spanId });
+    executionsSubmittedTotal.inc();
+
+    return { executionId };
+  } catch (err) {
+    span.setStatus({ code: SpanStatusCode.ERROR, message: String(err) });
+    if (err instanceof Error) span.recordException(err);
+    throw err;
+  } finally {
+    span.end();
+  }
 }
 
 /**

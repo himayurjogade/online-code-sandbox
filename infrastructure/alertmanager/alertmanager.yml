@@ -1,0 +1,14 @@
+route:
+  receiver: default
+  group_by: ['alertname']
+  group_wait: 10s
+  group_interval: 1m
+  repeat_interval: 4h
+
+receivers:
+  - name: default
+    # Placeholder webhook — replace with a real receiver (Slack, PagerDuty, etc.)
+    # host.docker.internal resolves to the Docker host from inside a container.
+    webhook_configs:
+      - url: 'http://host.docker.internal:5001/webhook'
+        send_resolved: true

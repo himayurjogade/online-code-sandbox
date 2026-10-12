@@ -2,6 +2,7 @@
   "name": "online-code-sandbox",
   "version": "0.0.1",
   "private": true,
+  "packageManager": "pnpm@12.11.2",
   "type": "module",
   "scripts": {
     "build:shared": "pnpm --filter @online-code-sandbox/shared build",
@@ -15,7 +16,7 @@
     "format:check": "prettier --check .",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "check": "pnpm lint && pnpm format:check && pnpm typecheck",
+    "check": "pnpm lint && pnpm format:check && pnpm build:shared && pnpm typecheck",
     "docker:up": "docker compose up --build",
     "docker:down": "docker compose down",
     "prepare": "husky"

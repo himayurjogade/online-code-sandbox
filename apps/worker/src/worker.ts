@@ -6,6 +6,13 @@ import {
   isTerminalStatus,
 } from '@online-code-sandbox/shared';
 import type { ExecutionState, ExecutionJob } from '@online-code-sandbox/shared';
+import {
+  createLogger,
+  initTracing,
+  startLinkedSpan,
+  shutdownTracing,
+  SpanStatusCode,
+} from '@online-code-sandbox/shared/server';
 import { config } from './config.js';
 import { waitForJob, shutdownQueue } from './queue.js';
 import { DockerEngine } from './engines/dockerEngine.js';
@@ -14,6 +21,9 @@ import { QUEUE_NAME } from '@online-code-sandbox/shared';
 import express from 'express';
 import client from 'prom-client';
 import os from 'node:os';
+
+initTracing('worker');
+const logger = createLogger('worker');
 
 // ── Metrics Setup ────────────────────────────────────────────────────────────
 
@@ -58,7 +68,7 @@ metricsApp.get('/metrics', async (_req, res) => {
   }
 });
 const metricsServer = metricsApp.listen(3001, '0.0.0.0', () => {
-  console.log('[Worker] Metrics server listening on port 3001');
+  logger.info({ port: 3001 }, 'Metrics server listening');
 });
 
 /**
@@ -76,7 +86,7 @@ const metricsServer = metricsApp.listen(3001, '0.0.0.0', () => {
 const redis = new Redis(config.redisUrl);
 
 redis.on('error', (err: Error) => {
-  console.error('[Worker] Redis error:', err.message);
+  logger.error({ err }, 'Redis error');
 });
 
 // ── Engine ──────────────────────────────────────────────────────────────────
@@ -99,20 +109,21 @@ async function updateState(state: ExecutionState): Promise<void> {
 // ── Job processor ───────────────────────────────────────────────────────────
 
 async function processJob(job: ExecutionJob): Promise<void> {
-  const { executionId, language, source } = job;
-  console.log(`[Worker] Processing job ${executionId} (${language})`);
+  const { executionId, language, source, traceId, spanId } = job;
+  const log = logger.child({ executionId });
+  log.info({ language }, 'Processing job');
 
   const endTimer = executionDurationSeconds.startTimer();
 
   // Check if already cancelled before starting
   const state = await getState(executionId);
   if (!state) {
-    console.log(`[Worker] Job ${executionId} — state not found (expired?), skipping.`);
+    log.warn('State not found (expired?), skipping');
     endTimer();
     return;
   }
   if (isTerminalStatus(state.status)) {
-    console.log(`[Worker] Job ${executionId} — already ${state.status}, skipping.`);
+    log.info({ status: state.status }, 'Already terminal, skipping');
     endTimer();
     return;
   }
@@ -123,6 +134,10 @@ async function processJob(job: ExecutionJob): Promise<void> {
   await updateState(state);
 
   // Execute
+  const span = startLinkedSpan('worker', 'execute_in_sandbox', traceId, spanId, {
+    executionId,
+    language,
+  });
   try {
     const result = await engine.execute({
       executionId,
@@ -150,6 +165,11 @@ async function processJob(job: ExecutionJob): Promise<void> {
     state.status = ExecutionStatus.RUNTIME_ERROR;
     state.error = err instanceof Error ? err.message : 'Unknown execution error';
     state.exitCode = -1;
+    span.setStatus({ code: SpanStatusCode.ERROR, message: String(err) });
+    if (err instanceof Error) span.recordException(err);
+  } finally {
+    span.setAttribute('execution.status', state.status);
+    span.end();
   }
 
   state.completedAt = new Date().toISOString();
@@ -158,7 +178,7 @@ async function processJob(job: ExecutionJob): Promise<void> {
   executionsProcessedTotal.labels(state.status).inc();
   endTimer();
 
-  console.log(`[Worker] Job ${executionId} — ${state.status}`);
+  log.info({ status: state.status }, 'Job finished');
 }
 
 // ── Main loop ───────────────────────────────────────────────────────────────
@@ -166,7 +186,7 @@ async function processJob(job: ExecutionJob): Promise<void> {
 let running = true;
 
 async function main(): Promise<void> {
-  console.log('[Worker] Starting — waiting for jobs...');
+  logger.info('Starting — waiting for jobs');
 
   while (running) {
     try {
@@ -175,7 +195,7 @@ async function main(): Promise<void> {
       await processJob(job);
     } catch (err) {
       if (!running) break; // Shutdown in progress
-      console.error('[Worker] Error processing job:', err);
+      logger.error({ err }, 'Error processing job');
       // Brief pause before retrying to avoid tight error loops
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
@@ -185,11 +205,12 @@ async function main(): Promise<void> {
 // ── Graceful shutdown ───────────────────────────────────────────────────────
 
 async function shutdown(signal: string): Promise<void> {
-  console.log(`\n[Worker] ${signal} received — shutting down...`);
+  logger.info({ signal }, 'Shutdown signal received');
   running = false;
   metricsServer.close();
   await shutdownQueue();
   await redis.quit();
+  await shutdownTracing();
   process.exit(0);
 }
 
@@ -198,6 +219,6 @@ process.on('SIGINT', () => void shutdown('SIGINT'));
 
 // Start
 main().catch((err) => {
-  console.error('[Worker] Fatal error:', err);
+  logger.error({ err }, 'Fatal error');
   process.exit(1);
 });
