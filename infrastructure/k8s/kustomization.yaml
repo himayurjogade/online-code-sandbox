@@ -17,3 +17,5 @@ resources:
   - web/web-nginx-configmap.yaml
   - web/web-deployment.yaml
   - web/web-service.yaml
+  - observability/prometheus.yaml
+  - observability/grafana.yaml

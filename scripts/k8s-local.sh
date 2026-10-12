@@ -35,7 +35,7 @@ ensure_tool() {
 }
 
 cmd_up() {
-  echo "=== Starting Kubernetes Local Demo Cluster with Autoscaling ==="
+  echo "=== Starting Kubernetes Local Demo Cluster with Autoscaling & Observability ==="
   ensure_tool "docker"
   ensure_tool "kind"
   ensure_tool "kubectl"
@@ -56,7 +56,7 @@ cmd_up() {
   kubectl delete deployment metrics-server -n sandbox 2>/dev/null || true
   kubectl apply -f "${K8S_DIR}/metrics-server/metrics-server.yaml"
 
-  echo "==> Applying Kubernetes manifests & HPA autoscaling policies in sandbox namespace..."
+  echo "==> Applying Kubernetes manifests (Apps + Observability + HPA)..."
   kubectl apply -k "${K8S_DIR}"
 
   echo "==> Waiting for Redis rollout..."
@@ -71,17 +71,25 @@ cmd_up() {
   echo "==> Waiting for Web rollout..."
   kubectl rollout status deployment/web -n sandbox --timeout=120s
 
+  echo "==> Waiting for Prometheus rollout..."
+  kubectl rollout status deployment/prometheus -n sandbox --timeout=90s
+
+  echo "==> Waiting for Grafana rollout..."
+  kubectl rollout status deployment/grafana -n sandbox --timeout=90s
+
   echo ""
   echo "============================================================"
-  echo "🎉 Local Kubernetes Demo Cluster is UP with AUTOSCALING!"
+  echo "🎉 Local Kubernetes Demo Cluster is UP with GRAFANA & HPA!"
   echo "============================================================"
-  echo "  • Web Frontend: http://localhost:8080"
-  echo "  • API Server:   http://localhost:3000/api/health"
-  echo "  • HPA Policies: API (2->6 pods), Worker (2->8 pods)"
+  echo "  • Web Frontend:       http://localhost:8080"
+  echo "  • API Server:         http://localhost:3000/api/health"
+  echo "  • Grafana Dashboard:  http://localhost:3002 (User: admin / Pass: admin)"
+  echo "  • HPA Policies:       API (2->6 pods), Worker (2->8 pods)"
   echo "============================================================"
   echo "Commands:"
   echo "  • View status & HPA:   ./scripts/k8s-local.sh status"
   echo "  • Run E2E suite:       ./scripts/k8s-local.sh test"
+  echo "  • Connect to Grafana:  ./scripts/k8s-local.sh grafana"
   echo "  • Simulate load spike: ./scripts/k8s-local.sh load 50"
   echo "  • Tear down cluster:   ./scripts/k8s-local.sh down"
   echo "============================================================"
@@ -112,7 +120,14 @@ cmd_status() {
 
 cmd_test() {
   echo "=== Running E2E Verification Against Local K8s Cluster ==="
-  "${ROOT_DIR}/scripts/e2e-test.sh" "http://localhost:3000"
+  "${ROOT_DIR}/scripts/e2e-test.sh" "http://localhost:8080"
+}
+
+cmd_grafana() {
+  ensure_tool "kubectl"
+  echo "=== Port-forwarding Grafana to http://localhost:3002 ==="
+  echo "Open http://localhost:3002 in your browser (Anonymous Admin login enabled)."
+  kubectl port-forward -n sandbox svc/grafana 3002:3000
 }
 
 cmd_load() {
@@ -123,9 +138,9 @@ cmd_load() {
   kubectl get hpa -n sandbox || true
   kubectl get pods -n sandbox -l 'app in (api,worker)'
   echo ""
-  echo "Firing $count concurrent requests to http://localhost:3000/api/executions..."
+  echo "Firing $count concurrent requests to http://localhost:8080/api/executions..."
   for i in $(seq 1 "$count"); do
-    curl -s -X POST "http://localhost:3000/api/executions" \
+    curl -s -X POST "http://localhost:8080/api/executions" \
       -H "Content-Type: application/json" \
       -d '{"language":"python","source":"import time; sum(i*i for i in range(1000000))"}' \
       > /dev/null &
@@ -150,11 +165,14 @@ case "${1:-}" in
   test)
     cmd_test
     ;;
+  grafana)
+    cmd_grafana
+    ;;
   load)
     cmd_load "$@"
     ;;
   *)
-    echo "Usage: $0 {up|down|status|test|load [count]}"
+    echo "Usage: $0 {up|down|status|test|grafana|load [count]}"
     exit 1
     ;;
 esac

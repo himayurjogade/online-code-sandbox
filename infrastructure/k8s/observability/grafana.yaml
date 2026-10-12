@@ -1,0 +1,315 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: sandbox
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus.sandbox.svc.cluster.local:9090
+        isDefault: true
+        jsonData:
+          timeInterval: 5s
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards-provider
+  namespace: sandbox
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: 'default'
+        orgId: 1
+        folder: ''
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-pod-dashboard
+  namespace: sandbox
+data:
+  k8s-pods.json: |
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "id": null,
+      "links": [],
+      "panels": [
+        {
+          "id": 1,
+          "title": "Active Worker Pods (HPA Scaling)",
+          "type": "stat",
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "blue", "value": null },
+                  { "color": "green", "value": 2 },
+                  { "color": "orange", "value": 4 },
+                  { "color": "red", "value": 6 }
+                ]
+              }
+            }
+          },
+          "options": {
+            "colorMode": "background",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "reduceOptions": { "calcs": ["lastNotNull"], "values": false }
+          },
+          "targets": [
+            {
+              "expr": "count(count by (pod) (container_cpu_usage_seconds_total{namespace=\"sandbox\", pod=~\"worker.*\"})) or count(up{service=\"worker\"})",
+              "legendFormat": "Worker Pods"
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "title": "Active API Pods (HPA Scaling)",
+          "type": "stat",
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "gridPos": { "h": 5, "w": 6, "x": 6, "y": 0 },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "blue", "value": null },
+                  { "color": "green", "value": 2 },
+                  { "color": "orange", "value": 4 }
+                ]
+              }
+            }
+          },
+          "options": {
+            "colorMode": "background",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "reduceOptions": { "calcs": ["lastNotNull"], "values": false }
+          },
+          "targets": [
+            {
+              "expr": "count(count by (pod) (container_cpu_usage_seconds_total{namespace=\"sandbox\", pod=~\"api.*\"})) or count(up{service=\"api\"})",
+              "legendFormat": "API Pods"
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "title": "Total Completed Code Executions",
+          "type": "stat",
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "gridPos": { "h": 5, "w": 6, "x": 12, "y": 0 },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "unit": "short"
+            }
+          },
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "reduceOptions": { "calcs": ["lastNotNull"], "values": false }
+          },
+          "targets": [
+            {
+              "expr": "sum(executions_total{status=\"COMPLETED\"}) or vector(0)",
+              "legendFormat": "Completed"
+            }
+          ]
+        },
+        {
+          "id": 4,
+          "title": "Execution Error Rate",
+          "type": "stat",
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "gridPos": { "h": 5, "w": 6, "x": 18, "y": 0 },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "red", "value": 1 }
+                ]
+              }
+            }
+          },
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "reduceOptions": { "calcs": ["lastNotNull"], "values": false }
+          },
+          "targets": [
+            {
+              "expr": "sum(executions_total{status=~\"ERROR|FAILED\"}) or vector(0)",
+              "legendFormat": "Errors"
+            }
+          ]
+        },
+        {
+          "id": 5,
+          "title": "CPU Usage per Pod (mCores)",
+          "type": "timeseries",
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "gridPos": { "h": 9, "w": 12, "x": 0, "y": 5 },
+          "fieldConfig": {
+            "defaults": { "unit": "mcore" }
+          },
+          "targets": [
+            {
+              "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"sandbox\", container!=\"\", container!=\"POD\"}[1m])) * 1000",
+              "legendFormat": "{{pod}}"
+            }
+          ]
+        },
+        {
+          "id": 6,
+          "title": "Memory Working Set per Pod (MiB)",
+          "type": "timeseries",
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "gridPos": { "h": 9, "w": 12, "x": 12, "y": 5 },
+          "fieldConfig": {
+            "defaults": { "unit": "decbytes" }
+          },
+          "targets": [
+            {
+              "expr": "sum by (pod) (container_memory_working_set_bytes{namespace=\"sandbox\", container!=\"\", container!=\"POD\"})",
+              "legendFormat": "{{pod}}"
+            }
+          ]
+        },
+        {
+          "id": 7,
+          "title": "Code Executions Processed Rate (per sec)",
+          "type": "timeseries",
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+          "fieldConfig": {
+            "defaults": { "unit": "ops" }
+          },
+          "targets": [
+            {
+              "expr": "sum by (language) (rate(executions_total[1m]))",
+              "legendFormat": "{{language}}"
+            }
+          ]
+        },
+        {
+          "id": 8,
+          "title": "HTTP API Request Rate by Status",
+          "type": "timeseries",
+          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+          "fieldConfig": {
+            "defaults": { "unit": "reqps" }
+          },
+          "targets": [
+            {
+              "expr": "sum by (status_code) (rate(http_requests_total[1m]))",
+              "legendFormat": "HTTP {{status_code}}"
+            }
+          ]
+        }
+      ],
+      "refresh": "5s",
+      "schemaVersion": 38,
+      "style": "dark",
+      "tags": ["kubernetes", "sandbox"],
+      "time": { "from": "now-15m", "to": "now" },
+      "timepicker": { "refresh_intervals": ["5s", "10s", "30s", "1m"] },
+      "timezone": "browser",
+      "title": "Kubernetes Pods & Sandbox Metrics"
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: sandbox
+  labels:
+    app: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: grafana
+          image: grafana/grafana:latest
+          env:
+            - name: GF_AUTH_ANONYMOUS_ENABLED
+              value: 'true'
+            - name: GF_AUTH_ANONYMOUS_ORG_ROLE
+              value: 'Admin'
+            - name: GF_SECURITY_ADMIN_USER
+              value: 'admin'
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              value: 'admin'
+          ports:
+            - containerPort: 3000
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: dashboards-provider
+              mountPath: /etc/grafana/provisioning/dashboards
+            - name: dashboards
+              mountPath: /var/lib/grafana/dashboards
+      volumes:
+        - name: datasources
+          configMap:
+            name: grafana-datasources
+        - name: dashboards-provider
+          configMap:
+            name: grafana-dashboards-provider
+        - name: dashboards
+          configMap:
+            name: grafana-pod-dashboard
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: sandbox
+spec:
+  type: NodePort
+  selector:
+    app: grafana
+  ports:
+    - protocol: TCP
+      port: 3000
+      targetPort: 3000
+      nodePort: 30002
