@@ -67,11 +67,13 @@ jobs:
           IMAGE_TAG: ${{ github.event.inputs.image_tag || github.sha }}
         run: |
           REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          APP_REVISION="${{ github.event.workflow_run.head_sha || github.sha }}"
           ansible-playbook playbook.yml \
             -e "image_registry=ghcr.io/${REPO_OWNER}" \
             -e "image_tag=${IMAGE_TAG}" \
             -e "ghcr_token=${{ secrets.GITHUB_TOKEN }}" \
-            -e "repo_owner=${REPO_OWNER}"
+            -e "repo_owner=${REPO_OWNER}" \
+            -e "app_revision=${APP_REVISION}"
 
       - name: Post-Deployment Smoke Test
         run: |

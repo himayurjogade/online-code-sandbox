@@ -145,7 +145,8 @@ pipeline {
                         ansible-playbook playbook.yml \
                             --private-key="$SSH_KEY_PATH" \
                             -e "image_registry=${REGISTRY}/${REPO_OWNER}" \
-                            -e "image_tag=${IMAGE_TAG}"
+                            -e "image_tag=${IMAGE_TAG}" \
+                            -e "app_revision=${env.GIT_COMMIT ?: 'main'}"
 
                         API_IP=$(grep -A 1 '\\[api\\]' inventory.ini | grep -v '\\[api\\]' | awk '{print $1}' | head -n 1)
                         if [ -n "$API_IP" ]; then

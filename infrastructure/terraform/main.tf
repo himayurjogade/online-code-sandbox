@@ -117,6 +117,13 @@ resource "aws_security_group" "api" {
     cidr_blocks = ["0.0.0.0/0"] # Grafana
   }
 
+  ingress {
+    from_port   = 9090
+    to_port     = 9090
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"] # Prometheus
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -146,6 +153,11 @@ resource "aws_instance" "redis" {
   vpc_security_group_ids = [aws_security_group.ssh_access.id, aws_security_group.redis.id]
   key_name               = var.key_name
 
+  root_block_device {
+    volume_size = 20
+    volume_type = "gp3"
+  }
+
   tags = { Name = "sandbox-redis" }
 }
 
@@ -155,6 +167,11 @@ resource "aws_instance" "api" {
   subnet_id              = aws_subnet.public.id
   vpc_security_group_ids = [aws_security_group.ssh_access.id, aws_security_group.api.id]
   key_name               = var.key_name
+
+  root_block_device {
+    volume_size = 20
+    volume_type = "gp3"
+  }
 
   tags = { Name = "sandbox-api" }
 }
@@ -166,6 +183,11 @@ resource "aws_instance" "worker" {
   subnet_id              = aws_subnet.public.id
   vpc_security_group_ids = [aws_security_group.ssh_access.id]
   key_name               = var.key_name
+
+  root_block_device {
+    volume_size = 20
+    volume_type = "gp3"
+  }
 
   tags = { Name = "sandbox-worker-${count.index + 1}" }
 }

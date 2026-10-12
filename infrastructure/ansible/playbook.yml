@@ -7,6 +7,7 @@
     image_tag: "{{ lookup('env', 'IMAGE_TAG') | default('latest', true) }}"
     ghcr_token: "{{ lookup('env', 'GHCR_TOKEN') | default('', true) }}"
     repo_owner: "{{ lookup('env', 'REPO_OWNER') | default('vinayak-jaybhaye', true) }}"
+    app_revision: "{{ lookup('env', 'APP_REVISION') | default('main', true) }}"
   tasks:
     - name: Update apt cache
       apt:
@@ -61,7 +62,7 @@
       git:
         repo: https://github.com/vinayak-jaybhaye/online-code-sandbox.git
         dest: /home/ubuntu/online-code-sandbox
-        version: main
+        version: "{{ app_revision | default('main') }}"
         force: yes
       become: yes
       become_user: ubuntu
@@ -101,6 +102,13 @@
         echo "{{ ghcr_token }}" | docker login ghcr.io --username "{{ repo_owner }}" --password-stdin
       no_log: true
       when: ghcr_token is defined and (ghcr_token | length > 0)
+
+    - name: Prune unused Docker data on worker to free disk space
+      shell: |
+        set -euxo pipefail
+        docker system prune -af
+      args:
+        executable: /bin/bash
 
     - name: Pull and tag sandbox runtime images
       shell: |
@@ -152,6 +160,12 @@
         regexp: '^REDIS_URL='
         line: 'REDIS_URL=redis://{{ redis_private_ip }}:6379'
 
+    - name: Ensure WEB_PORT is 80 in .env for production
+      lineinfile:
+        path: /home/ubuntu/online-code-sandbox/.env
+        regexp: '^WEB_PORT='
+        line: 'WEB_PORT=80'
+
     - name: Log in to GHCR
       shell: |
         echo "{{ ghcr_token }}" | docker login ghcr.io --username "{{ repo_owner }}" --password-stdin
@@ -177,15 +191,48 @@
         IMAGE_TAG: '{{ image_tag }}'
 
     - name: Start API, web, and observability services
-      shell: |
-        set -euxo pipefail
-        docker compose -f docker-compose.prod.yml up -d
-      args:
-        chdir: /home/ubuntu/online-code-sandbox
-        executable: /bin/bash
-      environment:
-        IMAGE_REGISTRY: '{{ image_registry }}'
-        IMAGE_TAG: '{{ image_tag }}'
+      block:
+        - name: Validate resolved Compose configuration
+          shell: |
+            set -euxo pipefail
+            docker compose -f docker-compose.prod.yml config
+          args:
+            chdir: /home/ubuntu/online-code-sandbox
+            executable: /bin/bash
+          environment:
+            IMAGE_REGISTRY: '{{ image_registry }}'
+            IMAGE_TAG: '{{ image_tag }}'
+
+        - name: Start API, web, and observability services
+          shell: |
+            set -euxo pipefail
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+          args:
+            chdir: /home/ubuntu/online-code-sandbox
+            executable: /bin/bash
+          environment:
+            IMAGE_REGISTRY: '{{ image_registry }}'
+            IMAGE_TAG: '{{ image_tag }}'
+
+      rescue:
+        - name: Collect Compose diagnostics
+          shell: |
+            docker compose -f docker-compose.prod.yml ps -a
+            docker ps -a
+            docker compose -f docker-compose.prod.yml logs --no-color --tail=200
+          args:
+            chdir: /home/ubuntu/online-code-sandbox
+            executable: /bin/bash
+          register: compose_diagnostics
+          changed_when: false
+
+        - name: Show Compose diagnostics
+          debug:
+            var: compose_diagnostics.stdout_lines
+
+        - name: Fail deployment
+          fail:
+            msg: 'Docker Compose failed to start the application services.'
 
     - name: Wait for API health check
       uri:
