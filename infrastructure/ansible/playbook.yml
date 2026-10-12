@@ -158,6 +158,13 @@
       no_log: true
       when: ghcr_token is defined and (ghcr_token | length > 0)
 
+    - name: Prune unused Docker data to free disk space
+      shell: |
+        set -euxo pipefail
+        docker system prune -af
+      args:
+        executable: /bin/bash
+
     - name: Pull API and web images
       shell: |
         set -euxo pipefail
