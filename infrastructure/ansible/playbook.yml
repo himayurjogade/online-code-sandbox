@@ -145,7 +145,7 @@
     - name: Start Worker service
       shell: |
         set -euxo pipefail
-        docker compose -f docker-compose.prod.yml up -d worker
+        docker compose -f docker-compose.prod.yml up -d --no-deps worker
       args:
         chdir: /home/ubuntu/online-code-sandbox
         executable: /bin/bash
@@ -210,10 +210,19 @@
             IMAGE_REGISTRY: '{{ image_registry }}'
             IMAGE_TAG: '{{ image_tag }}'
 
+        - name: Stop any misplaced worker or redis containers on API node
+          shell: |
+            docker compose -f docker-compose.prod.yml stop worker redis 2>/dev/null || true
+            docker compose -f docker-compose.prod.yml rm -f worker redis 2>/dev/null || true
+          args:
+            chdir: /home/ubuntu/online-code-sandbox
+            executable: /bin/bash
+          failed_when: false
+
         - name: Start API, web, and observability services
           shell: |
             set -euxo pipefail
-            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans api web prometheus alertmanager grafana loki promtail tempo
           args:
             chdir: /home/ubuntu/online-code-sandbox
             executable: /bin/bash
