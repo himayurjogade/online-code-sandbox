@@ -11,9 +11,21 @@ data:
 
     scrape_configs:
       - job_name: 'sandbox-api'
-        static_configs:
-          - targets: ['api.sandbox.svc.cluster.local:3000']
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - sandbox
         relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: keep
+            regex: api
+          - source_labels: [__meta_kubernetes_pod_ip]
+            action: replace
+            target_label: __address__
+            replacement: $1:3000
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
           - target_label: service
             replacement: api
 

@@ -8,6 +8,7 @@ data:
     apiVersion: 1
     datasources:
       - name: Prometheus
+        uid: prometheus
         type: prometheus
         access: proxy
         url: http://prometheus.sandbox.svc.cluster.local:9090
@@ -50,10 +51,10 @@ data:
       "panels": [
         {
           "id": 1,
-          "title": "Active Worker Pods (HPA Scaling)",
+          "title": "Active Worker Pods (HPA)",
           "type": "stat",
-          "datasource": { "type": "prometheus", "uid": "Prometheus" },
-          "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 5, "w": 4, "x": 0, "y": 0 },
           "fieldConfig": {
             "defaults": {
               "color": { "mode": "thresholds" },
@@ -83,10 +84,10 @@ data:
         },
         {
           "id": 2,
-          "title": "Active API Pods (HPA Scaling)",
+          "title": "Active API Pods (HPA)",
           "type": "stat",
-          "datasource": { "type": "prometheus", "uid": "Prometheus" },
-          "gridPos": { "h": 5, "w": 6, "x": 6, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 5, "w": 4, "x": 4, "y": 0 },
           "fieldConfig": {
             "defaults": {
               "color": { "mode": "thresholds" },
@@ -115,10 +116,10 @@ data:
         },
         {
           "id": 3,
-          "title": "Total Completed Code Executions",
+          "title": "Total Code Runs",
           "type": "stat",
-          "datasource": { "type": "prometheus", "uid": "Prometheus" },
-          "gridPos": { "h": 5, "w": 6, "x": 12, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 5, "w": 4, "x": 8, "y": 0 },
           "fieldConfig": {
             "defaults": {
               "color": { "mode": "palette-classic" },
@@ -132,27 +133,27 @@ data:
           },
           "targets": [
             {
-              "expr": "sum(executions_total{status=\"COMPLETED\"}) or vector(0)",
-              "legendFormat": "Completed"
+              "expr": "sum(executions_processed_total) or sum(executions_submitted_total) or vector(0)",
+              "legendFormat": "Runs"
             }
           ]
         },
         {
           "id": 4,
-          "title": "Execution Error Rate",
+          "title": "Completed Executions",
           "type": "stat",
-          "datasource": { "type": "prometheus", "uid": "Prometheus" },
-          "gridPos": { "h": 5, "w": 6, "x": 18, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 5, "w": 4, "x": 12, "y": 0 },
           "fieldConfig": {
             "defaults": {
               "color": { "mode": "thresholds" },
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
-                  { "color": "green", "value": null },
-                  { "color": "red", "value": 1 }
+                  { "color": "green", "value": null }
                 ]
-              }
+              },
+              "unit": "short"
             }
           },
           "options": {
@@ -162,17 +163,80 @@ data:
           },
           "targets": [
             {
-              "expr": "sum(executions_total{status=~\"ERROR|FAILED\"}) or vector(0)",
-              "legendFormat": "Errors"
+              "expr": "sum(executions_processed_total{status=\"COMPLETED\"}) or vector(0)",
+              "legendFormat": "Completed"
             }
           ]
         },
         {
           "id": 5,
+          "title": "Execution Errors",
+          "type": "stat",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 5, "w": 4, "x": 16, "y": 0 },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "red", "value": 1 }
+                ]
+              },
+              "unit": "short"
+            }
+          },
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "reduceOptions": { "calcs": ["lastNotNull"], "values": false }
+          },
+          "targets": [
+            {
+              "expr": "sum(executions_processed_total{status=~\"RUNTIME_ERROR|TIMEOUT|OUTPUT_LIMIT\"}) or vector(0)",
+              "legendFormat": "Errors"
+            }
+          ]
+        },
+        {
+          "id": 6,
+          "title": "Execution Error Rate",
+          "type": "stat",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 5, "w": 4, "x": 20, "y": 0 },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "orange", "value": 5 },
+                  { "color": "red", "value": 15 }
+                ]
+              },
+              "unit": "percent"
+            }
+          },
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "reduceOptions": { "calcs": ["lastNotNull"], "values": false }
+          },
+          "targets": [
+            {
+              "expr": "((sum(executions_processed_total{status=~\"RUNTIME_ERROR|TIMEOUT|OUTPUT_LIMIT\"}) or vector(0)) / clamp_min(sum(executions_processed_total) or vector(0), 1)) * 100",
+              "legendFormat": "Error Rate"
+            }
+          ]
+        },
+        {
+          "id": 7,
           "title": "CPU Usage per Pod (mCores)",
           "type": "timeseries",
-          "datasource": { "type": "prometheus", "uid": "Prometheus" },
-          "gridPos": { "h": 9, "w": 12, "x": 0, "y": 5 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
           "fieldConfig": {
             "defaults": { "unit": "mcore" }
           },
@@ -184,11 +248,11 @@ data:
           ]
         },
         {
-          "id": 6,
+          "id": 8,
           "title": "Memory Working Set per Pod (MiB)",
           "type": "timeseries",
-          "datasource": { "type": "prometheus", "uid": "Prometheus" },
-          "gridPos": { "h": 9, "w": 12, "x": 12, "y": 5 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
           "fieldConfig": {
             "defaults": { "unit": "decbytes" }
           },
@@ -200,27 +264,31 @@ data:
           ]
         },
         {
-          "id": 7,
+          "id": 9,
           "title": "Code Executions Processed Rate (per sec)",
           "type": "timeseries",
-          "datasource": { "type": "prometheus", "uid": "Prometheus" },
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 13 },
           "fieldConfig": {
             "defaults": { "unit": "ops" }
           },
           "targets": [
             {
-              "expr": "sum by (language) (rate(executions_total[1m]))",
-              "legendFormat": "{{language}}"
+              "expr": "sum by (status) (rate(executions_processed_total[1m]))",
+              "legendFormat": "Processed: {{status}}"
+            },
+            {
+              "expr": "sum(rate(executions_submitted_total[1m]))",
+              "legendFormat": "Submitted (API)"
             }
           ]
         },
         {
-          "id": 8,
+          "id": 10,
           "title": "HTTP API Request Rate by Status",
           "type": "timeseries",
-          "datasource": { "type": "prometheus", "uid": "Prometheus" },
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 13 },
           "fieldConfig": {
             "defaults": { "unit": "reqps" }
           },
@@ -228,6 +296,38 @@ data:
             {
               "expr": "sum by (status_code) (rate(http_requests_total[1m]))",
               "legendFormat": "HTTP {{status_code}}"
+            }
+          ]
+        },
+        {
+          "id": 11,
+          "title": "Execution Duration (Seconds)",
+          "type": "timeseries",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 7, "w": 12, "x": 0, "y": 21 },
+          "fieldConfig": {
+            "defaults": { "unit": "s" }
+          },
+          "targets": [
+            {
+              "expr": "rate(execution_duration_seconds_sum[1m]) / rate(execution_duration_seconds_count[1m])",
+              "legendFormat": "Avg Duration ({{pod}})"
+            }
+          ]
+        },
+        {
+          "id": 12,
+          "title": "Redis Execution Queue Depth",
+          "type": "timeseries",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 7, "w": 12, "x": 12, "y": 21 },
+          "fieldConfig": {
+            "defaults": { "unit": "short" }
+          },
+          "targets": [
+            {
+              "expr": "max(queue_depth) or vector(0)",
+              "legendFormat": "Queue Depth"
             }
           ]
         }
