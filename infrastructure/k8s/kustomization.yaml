@@ -14,5 +14,6 @@ resources:
   - worker/worker-configmap.yaml
   - worker/worker-deployment.yaml
   - worker/worker-hpa.yaml
+  - web/web-nginx-configmap.yaml
   - web/web-deployment.yaml
   - web/web-service.yaml

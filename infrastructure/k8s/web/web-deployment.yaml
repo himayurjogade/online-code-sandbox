@@ -15,6 +15,7 @@ spec:
       labels:
         app: web
     spec:
+      enableServiceLinks: false
       containers:
         - name: web
           image: ghcr.io/vinayak-jaybhaye/online-code-sandbox-web:latest
@@ -28,3 +29,11 @@ spec:
             limits:
               cpu: 200m
               memory: 256Mi
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/conf.d/default.conf
+              subPath: default.conf
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: web-nginx-config
