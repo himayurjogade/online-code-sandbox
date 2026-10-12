@@ -15,6 +15,7 @@ spec:
       labels:
         app: worker
     spec:
+      enableServiceLinks: false
       containers:
         - name: worker
           image: ghcr.io/vinayak-jaybhaye/online-code-sandbox-worker:latest

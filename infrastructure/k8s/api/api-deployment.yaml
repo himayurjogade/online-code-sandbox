@@ -15,6 +15,7 @@ spec:
       labels:
         app: api
     spec:
+      enableServiceLinks: false
       containers:
         - name: api
           image: ghcr.io/vinayak-jaybhaye/online-code-sandbox-api:latest

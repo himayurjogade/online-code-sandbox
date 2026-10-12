@@ -6,5 +6,7 @@ metadata:
 data:
   NODE_ENV: 'production'
   REDIS_URL: 'redis://redis.sandbox.svc.cluster.local:6379'
+  EXECUTION_TIMEOUT_MS: '10000'
+  MAX_OUTPUT_BYTES: '1048576'
   LOG_LEVEL: 'info'
   METRICS_PORT: '3001'

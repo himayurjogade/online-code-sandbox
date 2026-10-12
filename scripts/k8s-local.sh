@@ -52,7 +52,11 @@ cmd_up() {
     kind create cluster --name "${CLUSTER_NAME}" --config "${K8S_DIR}/kind-config.yaml"
   fi
 
-  echo "==> Applying Kubernetes manifests & HPA autoscaling policies..."
+  echo "==> Applying Metrics Server in kube-system namespace..."
+  kubectl delete deployment metrics-server -n sandbox 2>/dev/null || true
+  kubectl apply -f "${K8S_DIR}/metrics-server/metrics-server.yaml"
+
+  echo "==> Applying Kubernetes manifests & HPA autoscaling policies in sandbox namespace..."
   kubectl apply -k "${K8S_DIR}"
 
   echo "==> Waiting for Redis rollout..."
