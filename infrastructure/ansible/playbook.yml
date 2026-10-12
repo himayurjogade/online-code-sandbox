@@ -5,6 +5,8 @@
   vars:
     image_registry: "{{ lookup('env', 'IMAGE_REGISTRY') | default('ghcr.io/vinayak-jaybhaye', true) }}"
     image_tag: "{{ lookup('env', 'IMAGE_TAG') | default('latest', true) }}"
+    ghcr_token: "{{ lookup('env', 'GHCR_TOKEN') | default('', true) }}"
+    repo_owner: "{{ lookup('env', 'REPO_OWNER') | default('vinayak-jaybhaye', true) }}"
   tasks:
     - name: Update apt cache
       apt:
@@ -85,6 +87,8 @@
   vars:
     image_registry: "{{ lookup('env', 'IMAGE_REGISTRY') | default('ghcr.io/vinayak-jaybhaye', true) }}"
     image_tag: "{{ lookup('env', 'IMAGE_TAG') | default('latest', true) }}"
+    ghcr_token: "{{ lookup('env', 'GHCR_TOKEN') | default('', true) }}"
+    repo_owner: "{{ lookup('env', 'REPO_OWNER') | default('vinayak-jaybhaye', true) }}"
   tasks:
     - name: Update REDIS_URL in .env
       lineinfile:
@@ -92,8 +96,15 @@
         regexp: '^REDIS_URL='
         line: 'REDIS_URL=redis://{{ redis_private_ip }}:6379'
 
+    - name: Log in to GHCR
+      shell: |
+        echo "{{ ghcr_token }}" | docker login ghcr.io --username "{{ repo_owner }}" --password-stdin
+      no_log: true
+      when: ghcr_token is defined and (ghcr_token | length > 0)
+
     - name: Pull and tag sandbox runtime images
       shell: |
+        set -euxo pipefail
         docker pull {{ image_registry }}/{{ item }}:{{ image_tag }}
         docker tag {{ image_registry }}/{{ item }}:{{ image_tag }} {{ item }}
       loop:
@@ -105,19 +116,35 @@
       args:
         executable: /bin/bash
 
-    - name: Pull and Start Worker Service
+    - name: Pull Worker service
       shell: |
-        IMAGE_REGISTRY={{ image_registry }} IMAGE_TAG={{ image_tag }} docker compose -f docker-compose.prod.yml pull worker
-        IMAGE_REGISTRY={{ image_registry }} IMAGE_TAG={{ image_tag }} docker compose -f docker-compose.prod.yml up -d worker
+        set -euxo pipefail
+        docker compose -f docker-compose.prod.yml pull worker
       args:
         chdir: /home/ubuntu/online-code-sandbox
         executable: /bin/bash
+      environment:
+        IMAGE_REGISTRY: '{{ image_registry }}'
+        IMAGE_TAG: '{{ image_tag }}'
+
+    - name: Start Worker service
+      shell: |
+        set -euxo pipefail
+        docker compose -f docker-compose.prod.yml up -d worker
+      args:
+        chdir: /home/ubuntu/online-code-sandbox
+        executable: /bin/bash
+      environment:
+        IMAGE_REGISTRY: '{{ image_registry }}'
+        IMAGE_TAG: '{{ image_tag }}'
 
 - name: Setup API & Observability Node
   hosts: api
   vars:
     image_registry: "{{ lookup('env', 'IMAGE_REGISTRY') | default('ghcr.io/vinayak-jaybhaye', true) }}"
     image_tag: "{{ lookup('env', 'IMAGE_TAG') | default('latest', true) }}"
+    ghcr_token: "{{ lookup('env', 'GHCR_TOKEN') | default('', true) }}"
+    repo_owner: "{{ lookup('env', 'REPO_OWNER') | default('vinayak-jaybhaye', true) }}"
   tasks:
     - name: Update REDIS_URL in .env
       lineinfile:
@@ -125,13 +152,33 @@
         regexp: '^REDIS_URL='
         line: 'REDIS_URL=redis://{{ redis_private_ip }}:6379'
 
-    - name: Pull and Start API, Web, and Observability services
+    - name: Log in to GHCR
       shell: |
-        IMAGE_REGISTRY={{ image_registry }} IMAGE_TAG={{ image_tag }} docker compose -f docker-compose.prod.yml pull api web
-        IMAGE_REGISTRY={{ image_registry }} IMAGE_TAG={{ image_tag }} docker compose -f docker-compose.prod.yml up -d
+        echo "{{ ghcr_token }}" | docker login ghcr.io --username "{{ repo_owner }}" --password-stdin
+      no_log: true
+      when: ghcr_token is defined and (ghcr_token | length > 0)
+
+    - name: Pull API and web images
+      shell: |
+        set -euxo pipefail
+        docker compose -f docker-compose.prod.yml pull api web
       args:
         chdir: /home/ubuntu/online-code-sandbox
         executable: /bin/bash
+      environment:
+        IMAGE_REGISTRY: '{{ image_registry }}'
+        IMAGE_TAG: '{{ image_tag }}'
+
+    - name: Start API, web, and observability services
+      shell: |
+        set -euxo pipefail
+        docker compose -f docker-compose.prod.yml up -d
+      args:
+        chdir: /home/ubuntu/online-code-sandbox
+        executable: /bin/bash
+      environment:
+        IMAGE_REGISTRY: '{{ image_registry }}'
+        IMAGE_TAG: '{{ image_tag }}'
 
     - name: Wait for API health check
       uri:
@@ -139,5 +186,5 @@
         status_code: 200
       register: api_health
       until: api_health.status == 200
-      retries: 20
+      retries: 25
       delay: 3

@@ -14,6 +14,10 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+  packages: read
+
 jobs:
   deploy:
     name: Provision & Deploy to AWS
@@ -65,12 +69,16 @@ jobs:
           REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           ansible-playbook playbook.yml \
             -e "image_registry=ghcr.io/${REPO_OWNER}" \
-            -e "image_tag=${IMAGE_TAG}"
+            -e "image_tag=${IMAGE_TAG}" \
+            -e "ghcr_token=${{ secrets.GITHUB_TOKEN }}" \
+            -e "repo_owner=${REPO_OWNER}"
 
       - name: Post-Deployment Smoke Test
         run: |
           API_IP=$(grep -A 1 '\[api\]' infrastructure/ansible/inventory.ini | grep -v '\[api\]' | awk '{print $1}' | head -n 1)
           if [ -n "$API_IP" ]; then
+            echo "Verifying web frontend at http://$API_IP ..."
+            curl -s -f "http://$API_IP" > /dev/null || echo "::warning::Web frontend not responding on port 80"
             echo "Running smoke tests against deployed API at http://$API_IP:3000 ..."
             chmod +x scripts/e2e-test.sh
             ./scripts/e2e-test.sh "http://$API_IP:3000"
