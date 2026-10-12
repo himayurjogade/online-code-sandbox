@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: sandbox
+
+resources:
+  - namespace.yaml
+  - redis/redis-deployment.yaml
+  - redis/redis-service.yaml
+  - api/api-configmap.yaml
+  - api/api-deployment.yaml
+  - api/api-service.yaml
+  - worker/worker-configmap.yaml
+  - worker/worker-deployment.yaml
+  - web/web-deployment.yaml
+  - web/web-service.yaml
