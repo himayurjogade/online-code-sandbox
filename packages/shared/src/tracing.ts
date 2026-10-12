@@ -1,17 +1,18 @@
-import { trace, context, TraceFlags } from '@opentelemetry/api';
+import { trace, context, TraceFlags, SpanStatusCode } from '@opentelemetry/api';
 import type { Span } from '@opentelemetry/api';
 import { NodeTracerProvider, BatchSpanProcessor } from '@opentelemetry/sdk-trace-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 
 let registered = false;
+let provider: NodeTracerProvider | null = null;
 
 /** Registers a NodeTracerProvider exporting to Tempo via OTLP/HTTP. Call once per process. */
 export function initTracing(service: string): void {
   if (registered) return;
   registered = true;
 
-  const provider = new NodeTracerProvider({
+  provider = new NodeTracerProvider({
     resource: resourceFromAttributes({ 'service.name': service }),
     spanProcessors: [
       new BatchSpanProcessor(
@@ -22,6 +23,13 @@ export function initTracing(service: string): void {
     ],
   });
   provider.register();
+}
+
+/** Flushes pending spans and shuts down the tracer provider. Call before process.exit(). */
+export async function shutdownTracing(): Promise<void> {
+  if (provider) {
+    await provider.shutdown();
+  }
 }
 
 /** Starts a new root span, returning the IDs needed to link a child span across a process boundary (e.g. a Redis queue). */
@@ -52,4 +60,5 @@ export function startLinkedSpan(
   return trace.getTracer(service).startSpan(name, { attributes }, parentContext);
 }
 
+export { SpanStatusCode };
 export type { Span };

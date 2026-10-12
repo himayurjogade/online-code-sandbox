@@ -1,5 +1,5 @@
 import { Redis } from 'ioredis';
-import { createLogger } from '@online-code-sandbox/shared';
+import { createLogger } from '@online-code-sandbox/shared/server';
 import { config } from '../config.js';
 
 const logger = createLogger('api');

@@ -2,13 +2,13 @@ groups:
   - name: execution_alerts
     rules:
       - alert: ExecutionSuccessRateBelowSLO
-        expr: slo:execution_success_ratio:rate5m < 0.99
+        expr: slo:execution_success_ratio:rate5m < 0.99 and sum(rate(executions_processed_total[5m])) > 0.01
         for: 2m
         labels:
           severity: critical
         annotations:
           summary: 'Execution success rate below 99% SLO'
-          description: 'Success rate is {{ $value | humanizePercentage }} over the last 5m (SLO: 99%).'
+          description: 'Success rate is {{ $value | humanizePercentage }} over the last 5m (SLO: 99%). Only platform failures (TIMEOUT, OUTPUT_LIMIT) count against this SLO.'
 
       - alert: QueueBacklogGrowing
         expr: queue_depth > 5

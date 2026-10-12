@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
-import { createLogger } from '@online-code-sandbox/shared';
+import { createLogger } from '@online-code-sandbox/shared/server';
 
 const logger = createLogger('api');
 

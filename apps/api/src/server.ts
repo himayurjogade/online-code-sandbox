@@ -4,7 +4,7 @@ import { config } from './config.js';
 import { executionsRouter } from './routes/executions.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { shutdownRedis } from './services/redisClient.js';
-import { createLogger, initTracing } from '@online-code-sandbox/shared';
+import { createLogger, initTracing, shutdownTracing } from '@online-code-sandbox/shared/server';
 import client from 'prom-client';
 import os from 'node:os';
 
@@ -82,6 +82,7 @@ async function shutdown(signal: string) {
   logger.info({ signal }, 'Shutdown signal received');
   server.close();
   await shutdownRedis();
+  await shutdownTracing();
   process.exit(0);
 }
 

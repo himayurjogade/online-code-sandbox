@@ -1,5 +1,6 @@
 import { Redis } from 'ioredis';
-import { QUEUE_NAME, createLogger } from '@online-code-sandbox/shared';
+import { QUEUE_NAME } from '@online-code-sandbox/shared';
+import { createLogger } from '@online-code-sandbox/shared/server';
 import type { ExecutionJob } from '@online-code-sandbox/shared';
 import { config } from './config.js';
 

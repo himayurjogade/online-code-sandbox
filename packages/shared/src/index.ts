@@ -29,11 +29,3 @@ export type {
   ServerEvent,
   ClientEvent,
 } from './types/events.js';
-
-// Logging
-export { createLogger } from './logger.js';
-export type { Logger } from './logger.js';
-
-// Tracing
-export { initTracing, startRootSpan, startLinkedSpan } from './tracing.js';
-export type { Span } from './tracing.js';

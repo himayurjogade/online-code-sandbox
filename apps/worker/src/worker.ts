@@ -4,11 +4,15 @@ import {
   executionKey,
   EXECUTION_TTL_SECONDS,
   isTerminalStatus,
+} from '@online-code-sandbox/shared';
+import type { ExecutionState, ExecutionJob } from '@online-code-sandbox/shared';
+import {
   createLogger,
   initTracing,
   startLinkedSpan,
-} from '@online-code-sandbox/shared';
-import type { ExecutionState, ExecutionJob } from '@online-code-sandbox/shared';
+  shutdownTracing,
+  SpanStatusCode,
+} from '@online-code-sandbox/shared/server';
 import { config } from './config.js';
 import { waitForJob, shutdownQueue } from './queue.js';
 import { DockerEngine } from './engines/dockerEngine.js';
@@ -161,6 +165,8 @@ async function processJob(job: ExecutionJob): Promise<void> {
     state.status = ExecutionStatus.RUNTIME_ERROR;
     state.error = err instanceof Error ? err.message : 'Unknown execution error';
     state.exitCode = -1;
+    span.setStatus({ code: SpanStatusCode.ERROR, message: String(err) });
+    if (err instanceof Error) span.recordException(err);
   } finally {
     span.setAttribute('execution.status', state.status);
     span.end();
@@ -204,6 +210,7 @@ async function shutdown(signal: string): Promise<void> {
   metricsServer.close();
   await shutdownQueue();
   await redis.quit();
+  await shutdownTracing();
   process.exit(0);
 }
 

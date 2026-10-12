@@ -7,6 +7,8 @@ route:
 
 receivers:
   - name: default
+    # Placeholder webhook — replace with a real receiver (Slack, PagerDuty, etc.)
+    # host.docker.internal resolves to the Docker host from inside a container.
     webhook_configs:
-      - url: 'http://localhost:5001/webhook'
+      - url: 'http://host.docker.internal:5001/webhook'
         send_resolved: true
