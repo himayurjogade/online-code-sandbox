@@ -28,8 +28,8 @@ spec:
                 name: worker-config
           resources:
             requests:
-              cpu: 100m
-              memory: 128Mi
+              cpu: 25m
+              memory: 64Mi
             limits:
               cpu: 1000m
               memory: 1Gi
