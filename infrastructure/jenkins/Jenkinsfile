@@ -1,0 +1,170 @@
+pipeline {
+    agent any
+
+    options {
+        timeout(time: 1, unit: 'HOURS')
+        ansiColor('xterm')
+        disableConcurrentBuilds()
+    }
+
+    environment {
+        REGISTRY = 'ghcr.io'
+        REPO_OWNER = 'vinayak-jaybhaye'
+        APP_NAME = 'online-code-sandbox'
+        IMAGE_TAG = "${env.BUILD_NUMBER}-${env.GIT_COMMIT ? env.GIT_COMMIT.take(7) : 'latest'}"
+    }
+
+    stages {
+        stage('Parallel: Quality, Tests & IaC') {
+            parallel {
+                stage('Code Quality & Typecheck') {
+                    steps {
+                        sh 'pnpm install --frozen-lockfile'
+                        sh 'pnpm check'
+                    }
+                }
+                stage('Unit Tests') {
+                    steps {
+                        sh 'pnpm install --frozen-lockfile'
+                        sh 'pnpm test'
+                    }
+                }
+                stage('IaC & Prometheus Rules') {
+                    steps {
+                        sh '''
+                            terraform -chdir=infrastructure/terraform fmt -check
+                            terraform -chdir=infrastructure/terraform init -backend=false
+                            terraform -chdir=infrastructure/terraform validate
+                            ansible-playbook -i localhost, infrastructure/ansible/playbook.yml --syntax-check
+                            docker run --rm --entrypoint promtool \
+                                -v "$(pwd)/infrastructure/prometheus:/etc/prometheus" \
+                                prom/prometheus:latest check rules \
+                                /etc/prometheus/rules.yml /etc/prometheus/alerts.yml
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Build & Push Docker Images') {
+            when {
+                anyOf {
+                    branch 'main'
+                    buildingTag()
+                }
+            }
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'github-registry-creds', usernameVariable: 'GHCR_USER', passwordVariable: 'GHCR_TOKEN')]) {
+                    sh 'echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin'
+                    sh '''
+                        # Application services
+                        docker build -t ${REGISTRY}/${REPO_OWNER}/${APP_NAME}-api:${IMAGE_TAG} \
+                                     -t ${REGISTRY}/${REPO_OWNER}/${APP_NAME}-api:latest \
+                                     -f apps/api/Dockerfile --build-arg API_PORT=3000 .
+                        docker build -t ${REGISTRY}/${REPO_OWNER}/${APP_NAME}-worker:${IMAGE_TAG} \
+                                     -t ${REGISTRY}/${REPO_OWNER}/${APP_NAME}-worker:latest \
+                                     -f apps/worker/Dockerfile .
+                        docker build -t ${REGISTRY}/${REPO_OWNER}/${APP_NAME}-web:${IMAGE_TAG} \
+                                     -t ${REGISTRY}/${REPO_OWNER}/${APP_NAME}-web:latest \
+                                     -f apps/web/Dockerfile --build-arg API_PORT=3000 .
+
+                        # Sandbox runtimes
+                        docker build -t ${REGISTRY}/${REPO_OWNER}/sandbox-python:${IMAGE_TAG} \
+                                     -t ${REGISTRY}/${REPO_OWNER}/sandbox-python:latest \
+                                     docker/sandbox/python
+                        docker build -t ${REGISTRY}/${REPO_OWNER}/sandbox-javascript:${IMAGE_TAG} \
+                                     -t ${REGISTRY}/${REPO_OWNER}/sandbox-javascript:latest \
+                                     docker/sandbox/javascript
+                        docker build -t ${REGISTRY}/${REPO_OWNER}/sandbox-cpp:${IMAGE_TAG} \
+                                     -t ${REGISTRY}/${REPO_OWNER}/sandbox-cpp:latest \
+                                     docker/sandbox/cpp
+                        docker build -t ${REGISTRY}/${REPO_OWNER}/sandbox-c:${IMAGE_TAG} \
+                                     -t ${REGISTRY}/${REPO_OWNER}/sandbox-c:latest \
+                                     docker/sandbox/c
+                        docker build -t ${REGISTRY}/${REPO_OWNER}/sandbox-java:${IMAGE_TAG} \
+                                     -t ${REGISTRY}/${REPO_OWNER}/sandbox-java:latest \
+                                     docker/sandbox/java
+
+                        # Push all images
+                        docker push ${REGISTRY}/${REPO_OWNER}/${APP_NAME}-api:${IMAGE_TAG}
+                        docker push ${REGISTRY}/${REPO_OWNER}/${APP_NAME}-api:latest
+                        docker push ${REGISTRY}/${REPO_OWNER}/${APP_NAME}-worker:${IMAGE_TAG}
+                        docker push ${REGISTRY}/${REPO_OWNER}/${APP_NAME}-worker:latest
+                        docker push ${REGISTRY}/${REPO_OWNER}/${APP_NAME}-web:${IMAGE_TAG}
+                        docker push ${REGISTRY}/${REPO_OWNER}/${APP_NAME}-web:latest
+
+                        docker push ${REGISTRY}/${REPO_OWNER}/sandbox-python:${IMAGE_TAG}
+                        docker push ${REGISTRY}/${REPO_OWNER}/sandbox-python:latest
+                        docker push ${REGISTRY}/${REPO_OWNER}/sandbox-javascript:${IMAGE_TAG}
+                        docker push ${REGISTRY}/${REPO_OWNER}/sandbox-javascript:latest
+                        docker push ${REGISTRY}/${REPO_OWNER}/sandbox-cpp:${IMAGE_TAG}
+                        docker push ${REGISTRY}/${REPO_OWNER}/sandbox-cpp:latest
+                        docker push ${REGISTRY}/${REPO_OWNER}/sandbox-c:${IMAGE_TAG}
+                        docker push ${REGISTRY}/${REPO_OWNER}/sandbox-c:latest
+                        docker push ${REGISTRY}/${REPO_OWNER}/sandbox-java:${IMAGE_TAG}
+                        docker push ${REGISTRY}/${REPO_OWNER}/sandbox-java:latest
+                    '''
+                }
+            }
+        }
+
+        stage('E2E Integration Verification') {
+            steps {
+                sh '''
+                    cp .env.example .env
+                    docker compose up -d --build redis api worker
+                    chmod +x scripts/e2e-test.sh
+                    ./scripts/e2e-test.sh http://localhost:3000
+                '''
+            }
+            post {
+                always {
+                    sh 'docker compose down -v'
+                }
+            }
+        }
+
+        stage('Approval Gate for Production') {
+            when {
+                branch 'main'
+            }
+            steps {
+                input message: "Approve deployment of tag ${IMAGE_TAG} to AWS production?", ok: 'Deploy'
+            }
+        }
+
+        stage('Deploy to AWS via Ansible') {
+            when {
+                branch 'main'
+            }
+            steps {
+                withCredentials([sshUserPrivateKey(credentialsId: 'aws-deploy-ssh-key', keyFileVariable: 'SSH_KEY_PATH', usernameVariable: 'SSH_USER')]) {
+                    sh '''
+                        cd infrastructure/ansible
+                        export ANSIBLE_HOST_KEY_CHECKING=False
+                        ansible-playbook playbook.yml \
+                            --private-key="$SSH_KEY_PATH" \
+                            -e "image_registry=${REGISTRY}/${REPO_OWNER}" \
+                            -e "image_tag=${IMAGE_TAG}"
+
+                        API_IP=$(grep -A 1 '\\[api\\]' inventory.ini | grep -v '\\[api\\]' | awk '{print $1}' | head -n 1)
+                        if [ -n "$API_IP" ]; then
+                            echo "Running post-deploy smoke tests against http://$API_IP:3000 ..."
+                            chmod +x ../../scripts/e2e-test.sh
+                            ../../scripts/e2e-test.sh "http://$API_IP:3000"
+                        fi
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Pipeline succeeded! All tests passed and images deployed."
+        }
+        failure {
+            echo "Pipeline failed! Please check stage logs for details."
+        }
+    }
+}

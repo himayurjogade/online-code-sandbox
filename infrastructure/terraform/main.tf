@@ -20,7 +20,7 @@ provider "aws" {
 resource "aws_vpc" "main" {
   cidr_block           = "10.0.0.0/16"
   enable_dns_hostnames = true
-  tags = { Name = "sandbox-vpc" }
+  tags                 = { Name = "sandbox-vpc" }
 }
 
 resource "aws_subnet" "public" {
@@ -28,12 +28,12 @@ resource "aws_subnet" "public" {
   cidr_block              = "10.0.1.0/24"
   map_public_ip_on_launch = true
   availability_zone       = "${var.aws_region}a"
-  tags = { Name = "sandbox-subnet-public" }
+  tags                    = { Name = "sandbox-subnet-public" }
 }
 
 resource "aws_internet_gateway" "igw" {
   vpc_id = aws_vpc.main.id
-  tags = { Name = "sandbox-igw" }
+  tags   = { Name = "sandbox-igw" }
 }
 
 resource "aws_route_table" "public" {
@@ -102,7 +102,7 @@ resource "aws_security_group" "api" {
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
-  
+
   ingress {
     from_port   = 3002
     to_port     = 3002

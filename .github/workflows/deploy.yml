@@ -2,11 +2,23 @@ name: Deploy to AWS
 
 on:
   workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Image tag to deploy (default: latest)'
+        required: false
+        default: 'latest'
+  workflow_run:
+    workflows: ['CI']
+    types:
+      - completed
+    branches:
+      - main
 
 jobs:
   deploy:
-    name: Deploy via Ansible
+    name: Provision & Deploy to AWS
     runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') }}
 
     steps:
       - name: Checkout Code
@@ -17,14 +29,51 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION || 'ap-south-1' }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.5.7
+
+      - name: Terraform Apply (Provision & Generate Inventory)
+        working-directory: ./infrastructure/terraform
+        run: |
+          terraform init
+          terraform apply -auto-approve
+          if [ ! -f "../ansible/inventory.ini" ]; then
+            echo "::error::Terraform did not generate ../ansible/inventory.ini"
+            exit 1
+          fi
+
       - name: Install Ansible
         run: |
           sudo apt-get update
           sudo apt-get install -y ansible
 
-      - name: Run Ansible Playbook
+      - name: Run Ansible Deployment Playbook
         working-directory: ./infrastructure/ansible
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: 'False'
+          IMAGE_TAG: ${{ github.event.inputs.image_tag || github.sha }}
         run: |
-          # Disable strict host key checking to prevent interactive prompts in CI
-          export ANSIBLE_HOST_KEY_CHECKING=False
-          ansible-playbook playbook.yml
+          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          ansible-playbook playbook.yml \
+            -e "image_registry=ghcr.io/${REPO_OWNER}" \
+            -e "image_tag=${IMAGE_TAG}"
+
+      - name: Post-Deployment Smoke Test
+        run: |
+          API_IP=$(grep -A 1 '\[api\]' infrastructure/ansible/inventory.ini | grep -v '\[api\]' | awk '{print $1}' | head -n 1)
+          if [ -n "$API_IP" ]; then
+            echo "Running smoke tests against deployed API at http://$API_IP:3000 ..."
+            chmod +x scripts/e2e-test.sh
+            ./scripts/e2e-test.sh "http://$API_IP:3000"
+          else
+            echo "::warning::Could not determine API IP from inventory.ini to run smoke tests."
+          fi

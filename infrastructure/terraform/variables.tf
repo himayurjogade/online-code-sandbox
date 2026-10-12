@@ -7,7 +7,7 @@ variable "aws_region" {
 variable "key_name" {
   description = "Name of an existing EC2 KeyPair to enable SSH access. Must exist in the selected AWS region."
   type        = string
-  default     = "sandbox-key"
+  default     = "builder_key"
 }
 
 variable "instance_type_api" {

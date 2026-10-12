@@ -2,6 +2,9 @@
 - name: Setup Prerequisites on All Nodes
   hosts: all
   become: yes
+  vars:
+    image_registry: "{{ lookup('env', 'IMAGE_REGISTRY') | default('ghcr.io/vinayak-jaybhaye', true) }}"
+    image_tag: "{{ lookup('env', 'IMAGE_TAG') | default('latest', true) }}"
   tasks:
     - name: Update apt cache
       apt:
@@ -52,7 +55,7 @@
     - name: Reset connection so docker group is picked up
       meta: reset_connection
 
-    - name: Clone repository
+    - name: Clone or update repository
       git:
         repo: https://github.com/vinayak-jaybhaye/online-code-sandbox.git
         dest: /home/ubuntu/online-code-sandbox
@@ -61,37 +64,27 @@
       become: yes
       become_user: ubuntu
 
-    - name: Create .env from example
+    - name: Create .env from example if not exists
       copy:
         src: /home/ubuntu/online-code-sandbox/.env.example
         dest: /home/ubuntu/online-code-sandbox/.env
         remote_src: yes
         owner: ubuntu
+        force: no
 
 - name: Setup Redis Node
   hosts: redis
   tasks:
-    - name: Start Redis Container
-      command: docker compose up -d redis
-      args:
-        chdir: /home/ubuntu/online-code-sandbox
-
-- name: Setup API Node
-  hosts: api
-  tasks:
-    - name: Update REDIS_URL in .env
-      lineinfile:
-        path: /home/ubuntu/online-code-sandbox/.env
-        regexp: '^REDIS_URL='
-        line: 'REDIS_URL=redis://{{ redis_private_ip }}:6379'
-
-    - name: Start API and Web services
-      command: docker compose up -d --build api web
+    - name: Pull and Start Redis Container
+      command: docker compose -f docker-compose.prod.yml up -d redis
       args:
         chdir: /home/ubuntu/online-code-sandbox
 
 - name: Setup Worker Nodes
   hosts: workers
+  vars:
+    image_registry: "{{ lookup('env', 'IMAGE_REGISTRY') | default('ghcr.io/vinayak-jaybhaye', true) }}"
+    image_tag: "{{ lookup('env', 'IMAGE_TAG') | default('latest', true) }}"
   tasks:
     - name: Update REDIS_URL in .env
       lineinfile:
@@ -99,7 +92,52 @@
         regexp: '^REDIS_URL='
         line: 'REDIS_URL=redis://{{ redis_private_ip }}:6379'
 
-    - name: Start Worker service
-      command: docker compose up -d --build worker
+    - name: Pull and tag sandbox runtime images
+      shell: |
+        docker pull {{ image_registry }}/{{ item }}:{{ image_tag }}
+        docker tag {{ image_registry }}/{{ item }}:{{ image_tag }} {{ item }}
+      loop:
+        - sandbox-python
+        - sandbox-javascript
+        - sandbox-cpp
+        - sandbox-c
+        - sandbox-java
+      args:
+        executable: /bin/bash
+
+    - name: Pull and Start Worker Service
+      shell: |
+        IMAGE_REGISTRY={{ image_registry }} IMAGE_TAG={{ image_tag }} docker compose -f docker-compose.prod.yml pull worker
+        IMAGE_REGISTRY={{ image_registry }} IMAGE_TAG={{ image_tag }} docker compose -f docker-compose.prod.yml up -d worker
       args:
         chdir: /home/ubuntu/online-code-sandbox
+        executable: /bin/bash
+
+- name: Setup API & Observability Node
+  hosts: api
+  vars:
+    image_registry: "{{ lookup('env', 'IMAGE_REGISTRY') | default('ghcr.io/vinayak-jaybhaye', true) }}"
+    image_tag: "{{ lookup('env', 'IMAGE_TAG') | default('latest', true) }}"
+  tasks:
+    - name: Update REDIS_URL in .env
+      lineinfile:
+        path: /home/ubuntu/online-code-sandbox/.env
+        regexp: '^REDIS_URL='
+        line: 'REDIS_URL=redis://{{ redis_private_ip }}:6379'
+
+    - name: Pull and Start API, Web, and Observability services
+      shell: |
+        IMAGE_REGISTRY={{ image_registry }} IMAGE_TAG={{ image_tag }} docker compose -f docker-compose.prod.yml pull api web
+        IMAGE_REGISTRY={{ image_registry }} IMAGE_TAG={{ image_tag }} docker compose -f docker-compose.prod.yml up -d
+      args:
+        chdir: /home/ubuntu/online-code-sandbox
+        executable: /bin/bash
+
+    - name: Wait for API health check
+      uri:
+        url: 'http://localhost:3000/api/health'
+        status_code: 200
+      register: api_health
+      until: api_health.status == 200
+      retries: 20
+      delay: 3
