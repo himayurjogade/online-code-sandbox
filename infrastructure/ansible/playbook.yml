@@ -9,6 +9,13 @@
     repo_owner: "{{ lookup('env', 'REPO_OWNER') | default('vinayak-jaybhaye', true) }}"
     app_revision: "{{ lookup('env', 'APP_REVISION') | default('main', true) }}"
   tasks:
+    - name: Expand root filesystem if EBS disk was enlarged
+      shell: |
+        growpart /dev/nvme0n1 1 || growpart /dev/xvda 1 || true
+        resize2fs /dev/nvme0n1p1 || resize2fs /dev/root || resize2fs /dev/xvda1 || true
+      failed_when: false
+      changed_when: false
+
     - name: Update apt cache
       apt:
         update_cache: yes
