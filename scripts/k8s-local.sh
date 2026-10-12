@@ -52,6 +52,25 @@ cmd_up() {
     kind create cluster --name "${CLUSTER_NAME}" --config "${K8S_DIR}/kind-config.yaml"
   fi
 
+  echo "==> Preloading cached Docker images into Kind cluster..."
+  docker tag online-code-sandbox-api:latest ghcr.io/vinayak-jaybhaye/online-code-sandbox-api:latest 2>/dev/null || true
+  docker tag online-code-sandbox-web:latest ghcr.io/vinayak-jaybhaye/online-code-sandbox-web:latest 2>/dev/null || true
+  docker tag online-code-sandbox-worker:latest ghcr.io/vinayak-jaybhaye/online-code-sandbox-worker:latest 2>/dev/null || true
+
+  for img in \
+    "ghcr.io/vinayak-jaybhaye/online-code-sandbox-api:latest" \
+    "ghcr.io/vinayak-jaybhaye/online-code-sandbox-web:latest" \
+    "ghcr.io/vinayak-jaybhaye/online-code-sandbox-worker:latest" \
+    "redis:7-alpine" \
+    "grafana/grafana:latest" \
+    "prom/prometheus:latest"; do
+    if docker image inspect "$img" >/dev/null 2>&1; then
+      echo "  • Importing $img..."
+      docker save "$img" | docker exec -i "${CLUSTER_NAME}-control-plane" ctr --namespace=k8s.io images import - >/dev/null 2>&1 || \
+        kind load docker-image --name "${CLUSTER_NAME}" "$img" >/dev/null 2>&1 || true
+    fi
+  done
+
   echo "==> Applying Metrics Server in kube-system namespace..."
   kubectl delete deployment metrics-server -n sandbox 2>/dev/null || true
   kubectl apply -f "${K8S_DIR}/metrics-server/metrics-server.yaml"
@@ -60,22 +79,22 @@ cmd_up() {
   kubectl apply -k "${K8S_DIR}"
 
   echo "==> Waiting for Redis rollout..."
-  kubectl rollout status deployment/redis -n sandbox --timeout=90s
+  kubectl rollout status deployment/redis -n sandbox --timeout=180s
 
   echo "==> Waiting for API rollout..."
-  kubectl rollout status deployment/api -n sandbox --timeout=120s
+  kubectl rollout status deployment/api -n sandbox --timeout=180s
 
   echo "==> Waiting for Worker rollout..."
-  kubectl rollout status deployment/worker -n sandbox --timeout=120s
+  kubectl rollout status deployment/worker -n sandbox --timeout=180s
 
   echo "==> Waiting for Web rollout..."
-  kubectl rollout status deployment/web -n sandbox --timeout=120s
+  kubectl rollout status deployment/web -n sandbox --timeout=180s
 
   echo "==> Waiting for Prometheus rollout..."
-  kubectl rollout status deployment/prometheus -n sandbox --timeout=90s
+  kubectl rollout status deployment/prometheus -n sandbox --timeout=180s
 
   echo "==> Waiting for Grafana rollout..."
-  kubectl rollout status deployment/grafana -n sandbox --timeout=90s
+  kubectl rollout status deployment/grafana -n sandbox --timeout=180s
 
   echo ""
   echo "============================================================"
