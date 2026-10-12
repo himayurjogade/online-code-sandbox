@@ -35,7 +35,7 @@ ensure_tool() {
 }
 
 cmd_up() {
-  echo "=== Starting Kubernetes Local Demo Cluster ==="
+  echo "=== Starting Kubernetes Local Demo Cluster with Autoscaling ==="
   ensure_tool "docker"
   ensure_tool "kind"
   ensure_tool "kubectl"
@@ -52,7 +52,7 @@ cmd_up() {
     kind create cluster --name "${CLUSTER_NAME}" --config "${K8S_DIR}/kind-config.yaml"
   fi
 
-  echo "==> Applying Kubernetes manifests..."
+  echo "==> Applying Kubernetes manifests & HPA autoscaling policies..."
   kubectl apply -k "${K8S_DIR}"
 
   echo "==> Waiting for Redis rollout..."
@@ -69,14 +69,17 @@ cmd_up() {
 
   echo ""
   echo "============================================================"
-  echo "🎉 Local Kubernetes Demo Cluster is UP and RUNNING!"
+  echo "🎉 Local Kubernetes Demo Cluster is UP with AUTOSCALING!"
   echo "============================================================"
   echo "  • Web Frontend: http://localhost:8080"
   echo "  • API Server:   http://localhost:3000/api/health"
+  echo "  • HPA Policies: API (2->6 pods), Worker (2->8 pods)"
   echo "============================================================"
-  echo "To view cluster pods:  kubectl get pods -n sandbox"
-  echo "To run E2E tests:     ./scripts/k8s-local.sh test"
-  echo "To tear down cluster: ./scripts/k8s-local.sh down"
+  echo "Commands:"
+  echo "  • View status & HPA:   ./scripts/k8s-local.sh status"
+  echo "  • Run E2E suite:       ./scripts/k8s-local.sh test"
+  echo "  • Simulate load spike: ./scripts/k8s-local.sh load 50"
+  echo "  • Tear down cluster:   ./scripts/k8s-local.sh down"
   echo "============================================================"
 }
 
@@ -96,13 +99,38 @@ cmd_down() {
 
 cmd_status() {
   ensure_tool "kubectl"
-  echo "=== Sandbox Kubernetes Cluster Status ==="
+  echo "=== Sandbox Kubernetes Cluster Pods & Services ==="
   kubectl get pods,svc -n sandbox -o wide
+  echo ""
+  echo "=== Horizontal Pod Autoscaler (HPA) Status ==="
+  kubectl get hpa -n sandbox || true
 }
 
 cmd_test() {
   echo "=== Running E2E Verification Against Local K8s Cluster ==="
   "${ROOT_DIR}/scripts/e2e-test.sh" "http://localhost:3000"
+}
+
+cmd_load() {
+  local count="${2:-60}"
+  ensure_tool "kubectl"
+  echo "=== Generating Load Spike ($count concurrent code executions) ==="
+  echo "Initial Pods & HPA:"
+  kubectl get hpa -n sandbox || true
+  kubectl get pods -n sandbox -l 'app in (api,worker)'
+  echo ""
+  echo "Firing $count concurrent requests to http://localhost:3000/api/executions..."
+  for i in $(seq 1 "$count"); do
+    curl -s -X POST "http://localhost:3000/api/executions" \
+      -H "Content-Type: application/json" \
+      -d '{"language":"python","source":"import time; sum(i*i for i in range(1000000))"}' \
+      > /dev/null &
+  done
+  wait
+  echo "All $count execution requests submitted!"
+  echo ""
+  echo "Watching HPA autoscaling responses (Press Ctrl+C to stop watching):"
+  kubectl get hpa -n sandbox -w
 }
 
 case "${1:-}" in
@@ -118,8 +146,11 @@ case "${1:-}" in
   test)
     cmd_test
     ;;
+  load)
+    cmd_load "$@"
+    ;;
   *)
-    echo "Usage: $0 {up|down|status|test}"
+    echo "Usage: $0 {up|down|status|test|load [count]}"
     exit 1
     ;;
 esac

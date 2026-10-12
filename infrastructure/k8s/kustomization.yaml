@@ -5,12 +5,15 @@ namespace: sandbox
 
 resources:
   - namespace.yaml
+  - metrics-server/metrics-server.yaml
   - redis/redis-deployment.yaml
   - redis/redis-service.yaml
   - api/api-configmap.yaml
   - api/api-deployment.yaml
   - api/api-service.yaml
+  - api/api-hpa.yaml
   - worker/worker-configmap.yaml
   - worker/worker-deployment.yaml
+  - worker/worker-hpa.yaml
   - web/web-deployment.yaml
   - web/web-service.yaml
