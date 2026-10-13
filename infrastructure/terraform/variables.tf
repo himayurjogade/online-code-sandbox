@@ -10,20 +10,20 @@ variable "key_name" {
   default     = "builder_key"
 }
 
-variable "instance_type_api" {
-  description = "EC2 instance type for the API and Redis nodes"
+variable "instance_type" {
+  description = "EC2 instance type for the single-node Kubernetes (K3s) server (replaces the original 4-instance setup)"
   type        = string
-  default     = "t3.small"
+  default     = "t3.large"
 }
 
-variable "instance_type_worker" {
-  description = "EC2 instance type for the Worker nodes (requires more RAM for Docker-in-Docker)"
-  type        = string
-  default     = "t3.small"
-}
-
-variable "worker_count" {
-  description = "Number of worker nodes to provision"
+variable "volume_size" {
+  description = "Root EBS gp3 volume size in GB for the single-node server"
   type        = number
-  default     = 2
+  default     = 40
+}
+
+variable "ssh_cidr_blocks" {
+  description = "Allowed CIDR blocks for SSH access (port 22)"
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
 }

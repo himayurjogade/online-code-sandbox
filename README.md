@@ -57,8 +57,14 @@ packages/
   shared/           Shared types, enums, validation (single source of truth)
 docker/
   sandbox/python/   Python 3.11-slim sandbox Dockerfile
-infrastructure/     Terraform, Ansible, Jenkins (IaC)
+infrastructure/     Terraform (Single-Node K3s EC2), Kubernetes manifests, Ansible, Jenkins
 ```
+
+## Deployment Options
+
+- **Local Docker Compose**: `pnpm docker:up` (runs API, Worker, Redis, Web on localhost)
+- **Local Kubernetes Demo (Kind)**: `./scripts/k8s-local.sh up` (runs full K8s stack on Kind)
+- **AWS Single-Node Kubernetes (EC2)**: `./scripts/deploy-ec2.sh provision` (provisions 1 EC2 instance running K3s with full app and observability stack). See [infrastructure/terraform/README.md](infrastructure/terraform/README.md).
 
 ## Environment Variables
 

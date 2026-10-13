@@ -81,3 +81,25 @@ kubectl get pods,svc -n sandbox
 ```bash
 ./scripts/k8s-local.sh down
 ```
+
+---
+
+## AWS Single-Node EC2 Kubernetes Deployment
+
+The exact same Kubernetes manifests in this directory are deployed to a single AWS EC2 instance running K3s via Terraform and cloud-init:
+
+```bash
+# Provision single EC2 instance and bootstrap K3s cluster
+./scripts/deploy-ec2.sh provision
+
+# Check live remote status
+./scripts/deploy-ec2.sh status
+
+# Run automated end-to-end tests
+./scripts/deploy-ec2.sh test
+
+# Destroy EC2 instance
+./scripts/deploy-ec2.sh destroy
+```
+
+See [infrastructure/terraform/README.md](../terraform/README.md) for full architecture and operational details.

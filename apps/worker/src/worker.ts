@@ -207,10 +207,10 @@ async function main(): Promise<void> {
 async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, 'Shutdown signal received');
   running = false;
-  metricsServer.close();
   await shutdownQueue();
   await redis.quit();
   await shutdownTracing();
+  metricsServer.close();
   process.exit(0);
 }
 

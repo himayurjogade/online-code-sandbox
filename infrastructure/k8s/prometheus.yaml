@@ -7,25 +7,20 @@ data:
   prometheus.yml: |
     global:
       scrape_interval: 5s
-      evaluation_interval: 5s
 
     scrape_configs:
       - job_name: 'sandbox-api'
         kubernetes_sd_configs:
           - role: pod
             namespaces:
-              names:
-                - sandbox
+              names: [sandbox]
         relabel_configs:
-          - source_labels: [__meta_kubernetes_pod_label_app]
+          - source_labels: [__meta_kubernetes_pod_label_app, __meta_kubernetes_pod_phase]
+            regex: api;Running
             action: keep
-            regex: api
           - source_labels: [__meta_kubernetes_pod_ip]
-            action: replace
             target_label: __address__
             replacement: $1:3000
-          - source_labels: [__meta_kubernetes_pod_name]
-            target_label: pod
           - target_label: service
             replacement: api
 
@@ -33,36 +28,16 @@ data:
         kubernetes_sd_configs:
           - role: pod
             namespaces:
-              names:
-                - sandbox
+              names: [sandbox]
         relabel_configs:
-          - source_labels: [__meta_kubernetes_pod_label_app]
+          - source_labels: [__meta_kubernetes_pod_label_app, __meta_kubernetes_pod_phase]
+            regex: worker;Running
             action: keep
-            regex: worker
           - source_labels: [__meta_kubernetes_pod_ip]
-            action: replace
             target_label: __address__
             replacement: $1:3001
-          - source_labels: [__meta_kubernetes_pod_name]
-            target_label: pod
           - target_label: service
             replacement: worker
-
-      - job_name: 'cadvisor'
-        scheme: https
-        tls_config:
-          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-          insecure_skip_verify: true
-        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
-        kubernetes_sd_configs:
-          - role: node
-        relabel_configs:
-          - target_label: __address__
-            replacement: kubernetes.default.svc:443
-          - source_labels: [__meta_kubernetes_node_name]
-            regex: (.+)
-            target_label: __metrics_path__
-            replacement: /api/v1/nodes/$1/proxy/metrics/cadvisor
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -70,7 +45,7 @@ metadata:
   name: prometheus-k8s-reader
 rules:
   - apiGroups: ['']
-    resources: ['nodes', 'nodes/proxy', 'services', 'endpoints', 'pods']
+    resources: ['pods']
     verbs: ['get', 'list', 'watch']
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -85,6 +60,18 @@ subjects:
   - kind: ServiceAccount
     name: default
     namespace: sandbox
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-data
+  namespace: sandbox
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -115,18 +102,23 @@ spec:
             - containerPort: 9090
           resources:
             requests:
-              cpu: 100m
-              memory: 256Mi
+              cpu: 50m
+              memory: 128Mi
             limits:
-              cpu: 1000m
-              memory: 1024Mi
+              cpu: 500m
+              memory: 512Mi
           volumeMounts:
             - name: config
               mountPath: /etc/prometheus
+            - name: data
+              mountPath: /prometheus
       volumes:
         - name: config
           configMap:
             name: prometheus-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: prometheus-data
 ---
 apiVersion: v1
 kind: Service
@@ -134,6 +126,7 @@ metadata:
   name: prometheus
   namespace: sandbox
 spec:
+  type: LoadBalancer
   selector:
     app: prometheus
   ports:
