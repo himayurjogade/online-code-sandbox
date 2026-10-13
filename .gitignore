@@ -36,3 +36,4 @@ tmp/
 temp/
 infrastructure/terraform/.terraform
 *.tfstate*
+infrastructure/ansible/inventory.ini
