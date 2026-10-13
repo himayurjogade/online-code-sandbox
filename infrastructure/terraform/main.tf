@@ -143,7 +143,9 @@ resource "aws_instance" "server" {
     delete_on_termination = true
   }
 
-  user_data = file("${path.module}/user_data.sh")
+  user_data = templatefile("${path.module}/user_data.sh", {
+    app_revision = "main"
+  })
 
   tags = {
     Name = "sandbox-k8s-server"

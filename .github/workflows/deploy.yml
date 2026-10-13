@@ -86,8 +86,6 @@ jobs:
         working-directory: ./infrastructure/ansible
         env:
           ANSIBLE_HOST_KEY_CHECKING: 'False'
-          ANSIBLE_FORCE_COLOR: '1'
-          PYTHONUNBUFFERED: '1'
           IMAGE_TAG: ${{ github.event.inputs.image_tag || github.sha }}
         run: |
           REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
