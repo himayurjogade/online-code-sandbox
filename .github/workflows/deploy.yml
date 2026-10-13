@@ -33,6 +33,12 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
+      - name: Configure SSH Key File
+        run: |
+          mkdir -p "$HOME/keys"
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > "$HOME/keys/builder_key.pem"
+          chmod 600 "$HOME/keys/builder_key.pem"
+
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -59,6 +65,22 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ansible
+
+      - name: Wait for EC2 SSH Readiness
+        run: |
+          SERVER_IP=$(grep -A 1 '\[server\]' infrastructure/ansible/inventory.ini | grep -v '\[server\]' | awk '{print $1}' | head -n 1)
+          echo "Waiting for EC2 SSH to become reachable at ${SERVER_IP}:22 ..."
+          for i in $(seq 1 30); do
+            if timeout 3 bash -c "cat < /dev/null > /dev/tcp/$SERVER_IP/22" 2>/dev/null || nc -z -w 3 "$SERVER_IP" 22 2>/dev/null; then
+              echo "✅ SSH port 22 is open on $SERVER_IP!"
+              sleep 5
+              exit 0
+            fi
+            echo "Attempt $i/30: Port 22 not reachable yet, waiting 5s..."
+            sleep 5
+          done
+          echo "::error::EC2 instance $SERVER_IP was not reachable over SSH port 22 after 150 seconds."
+          exit 1
 
       - name: Run Ansible Deployment Playbook
         working-directory: ./infrastructure/ansible
