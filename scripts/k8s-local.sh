@@ -103,14 +103,16 @@ cmd_up() {
   echo "  • Web Frontend:       http://localhost:8080"
   echo "  • API Server:         http://localhost:3000/api/health"
   echo "  • Grafana Dashboard:  http://localhost:3002 (User: admin / Pass: admin)"
+  echo "  • Prometheus UI:      http://localhost:9090 (via ./scripts/k8s-local.sh prometheus)"
   echo "  • HPA Policies:       API (2->6 pods), Worker (2->8 pods)"
   echo "============================================================"
   echo "Commands:"
-  echo "  • View status & HPA:   ./scripts/k8s-local.sh status"
-  echo "  • Run E2E suite:       ./scripts/k8s-local.sh test"
-  echo "  • Connect to Grafana:  ./scripts/k8s-local.sh grafana"
-  echo "  • Simulate load spike: ./scripts/k8s-local.sh load 50"
-  echo "  • Tear down cluster:   ./scripts/k8s-local.sh down"
+  echo "  • View status & HPA:      ./scripts/k8s-local.sh status"
+  echo "  • Run E2E suite:          ./scripts/k8s-local.sh test"
+  echo "  • Connect to Grafana:     ./scripts/k8s-local.sh grafana"
+  echo "  • Connect to Prometheus:  ./scripts/k8s-local.sh prometheus"
+  echo "  • Simulate load spike:    ./scripts/k8s-local.sh load 50"
+  echo "  • Tear down cluster:      ./scripts/k8s-local.sh down"
   echo "============================================================"
 }
 
@@ -147,6 +149,13 @@ cmd_grafana() {
   echo "=== Port-forwarding Grafana to http://localhost:3002 ==="
   echo "Open http://localhost:3002 in your browser (Anonymous Admin login enabled)."
   kubectl port-forward -n sandbox svc/grafana 3002:3000
+}
+
+cmd_prometheus() {
+  ensure_tool "kubectl"
+  echo "=== Port-forwarding Prometheus to http://localhost:9090 ==="
+  echo "Open http://localhost:9090 in your browser."
+  kubectl port-forward -n sandbox svc/prometheus 9090:9090
 }
 
 cmd_load() {
@@ -187,11 +196,14 @@ case "${1:-}" in
   grafana)
     cmd_grafana
     ;;
+  prometheus)
+    cmd_prometheus
+    ;;
   load)
     cmd_load "$@"
     ;;
   *)
-    echo "Usage: $0 {up|down|status|test|grafana|load [count]}"
+    echo "Usage: $0 {up|down|status|test|grafana|prometheus|load [count]}"
     exit 1
     ;;
 esac
