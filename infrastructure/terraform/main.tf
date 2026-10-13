@@ -42,6 +42,7 @@ resource "aws_route_table" "public" {
     cidr_block = "0.0.0.0/0"
     gateway_id = aws_internet_gateway.igw.id
   }
+  tags = { Name = "sandbox-rt-public" }
 }
 
 resource "aws_route_table_association" "public" {
@@ -49,87 +50,70 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
-# ── Security Groups ──────────────────────────────────────────────────────────
+# ── Security Group (Single EC2 Instance) ────────────────────────────────────
 
-resource "aws_security_group" "ssh_access" {
-  name        = "sandbox-ssh"
-  description = "Allow SSH inbound traffic"
+resource "aws_security_group" "sandbox" {
+  name        = "sandbox-k8s-server"
+  description = "Security group for single-node K3s sandbox instance"
   vpc_id      = aws_vpc.main.id
 
+  # SSH Administration
   ingress {
+    description = "SSH access"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"] # In production, restrict to your IP
+    cidr_blocks = var.ssh_cidr_blocks
   }
 
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
-
-resource "aws_security_group" "redis" {
-  name        = "sandbox-redis"
-  description = "Allow Redis traffic from within VPC"
-  vpc_id      = aws_vpc.main.id
-
+  # Web Application Frontend (HTTP)
   ingress {
-    from_port   = 6379
-    to_port     = 6379
-    protocol    = "tcp"
-    cidr_blocks = [aws_vpc.main.cidr_block] # Only accessible internally
-  }
-}
-
-resource "aws_security_group" "api" {
-  name        = "sandbox-api"
-  description = "Allow HTTP and API traffic"
-  vpc_id      = aws_vpc.main.id
-
-  ingress {
+    description = "Web frontend reverse proxy"
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"] # Web frontend HTTP
-  }
-
-  ingress {
-    from_port   = 5173
-    to_port     = 5173
-    protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # REST API Server
   ingress {
+    description = "Execution REST API"
     from_port   = 3000
     to_port     = 3000
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # Grafana Observability Dashboard
   ingress {
+    description = "Grafana dashboard"
     from_port   = 3002
     to_port     = 3002
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"] # Grafana
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # Prometheus Metrics UI (Admin / Debugging)
   ingress {
+    description = "Prometheus UI"
     from_port   = 9090
     to_port     = 9090
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"] # Prometheus
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # Note: Port 6379 (Redis) is intentionally NOT exposed here.
+  # Redis is restricted to internal cluster communication only.
+
   egress {
+    description = "Allow all outbound traffic"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  tags = { Name = "sandbox-k8s-sg" }
 }
 
 # ── Data Sources ─────────────────────────────────────────────────────────────
@@ -144,50 +128,27 @@ data "aws_ami" "ubuntu" {
   }
 }
 
-# ── Compute Instances ────────────────────────────────────────────────────────
+# ── Single Compute Instance (Kubernetes K3s Node) ───────────────────────────
 
-resource "aws_instance" "redis" {
+resource "aws_instance" "server" {
   ami                    = data.aws_ami.ubuntu.id
-  instance_type          = var.instance_type_api
+  instance_type          = var.instance_type
   subnet_id              = aws_subnet.public.id
-  vpc_security_group_ids = [aws_security_group.ssh_access.id, aws_security_group.redis.id]
+  vpc_security_group_ids = [aws_security_group.sandbox.id]
   key_name               = var.key_name
 
   root_block_device {
-    volume_size = 20
-    volume_type = "gp3"
+    volume_size           = var.volume_size
+    volume_type           = "gp3"
+    delete_on_termination = true
   }
 
-  tags = { Name = "sandbox-redis" }
-}
+  user_data = templatefile("${path.module}/user_data.sh", {
+    app_revision = "main"
+  })
 
-resource "aws_instance" "api" {
-  ami                    = data.aws_ami.ubuntu.id
-  instance_type          = var.instance_type_api
-  subnet_id              = aws_subnet.public.id
-  vpc_security_group_ids = [aws_security_group.ssh_access.id, aws_security_group.api.id]
-  key_name               = var.key_name
-
-  root_block_device {
-    volume_size = 20
-    volume_type = "gp3"
+  tags = {
+    Name = "sandbox-k8s-server"
+    Role = "single-node-k3s"
   }
-
-  tags = { Name = "sandbox-api" }
-}
-
-resource "aws_instance" "worker" {
-  count                  = var.worker_count
-  ami                    = data.aws_ami.ubuntu.id
-  instance_type          = var.instance_type_worker
-  subnet_id              = aws_subnet.public.id
-  vpc_security_group_ids = [aws_security_group.ssh_access.id]
-  key_name               = var.key_name
-
-  root_block_device {
-    volume_size = 20
-    volume_type = "gp3"
-  }
-
-  tags = { Name = "sandbox-worker-${count.index + 1}" }
 }
