@@ -27,11 +27,8 @@
       failed_when: false
       changed_when: false
 
-    - name: Wait for cloud-init and system package manager locks
+    - name: Wait for system package manager locks to release
       shell: |
-        if command -v cloud-init >/dev/null 2>&1; then
-          cloud-init status --wait || true
-        fi
         while fuser /var/lib/dpkg/lock /var/lib/dpkg/lock-frontend /var/lib/apt/lists/lock >/dev/null 2>&1; do
           sleep 2
         done
